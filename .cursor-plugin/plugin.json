@@ -1,0 +1,13 @@
+{
+  "name": "sevalla",
+  "displayName": "Sevalla",
+  "description": "Deploy, debug and manage your Sevalla apps, static sites and databases from Cursor: trigger deploys, read logs and metrics, roll back, and set env vars.",
+  "author": { "name": "Sevalla", "email": "support@sevalla.com" },
+  "homepage": "https://docs.sevalla.com/ai-agents/cursor",
+  "repository": "https://github.com/sevalla/mcp",
+  "license": "MIT",
+  "logo": "src/assets/sevalla.svg",
+  "keywords": ["sevalla", "hosting", "paas", "deployment", "docker", "databases", "static-sites", "mcp"],
+  "category": "integrations",
+  "mcpServers": "./mcp.json"
+}
