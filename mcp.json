@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "sevalla": {
+      "type": "http",
+      "url": "https://mcp.sevalla.com/mcp"
+    }
+  }
+}
