@@ -4,5 +4,5 @@
   "singleQuote": true,
   "semi": false,
   "experimentalSortPackageJson": false,
-  "ignorePatterns": ["node_modules/**/*", "dist/**/*", "docs/**/*"]
+  "ignorePatterns": ["node_modules/**/*", "dist/**/*", "docs/**/*", "CHANGELOG.md", "server.json"]
 }

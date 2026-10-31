@@ -37,7 +37,9 @@ const MAX_REQUEST_BODY_BYTES = 1_048_576
 const MAX_TOOL_INPUT_ELEMENTS = 10_000
 const LIST_CACHE_HINT: CacheHint = { ttlMs: 3_600_000, cacheScope: 'public' }
 
-export const SERVER_VERSION = '2.0.0'
+export const SERVER_VERSION: string = JSON.parse(
+  readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+).version
 
 let isShuttingDown = false
 

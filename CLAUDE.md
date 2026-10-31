@@ -84,6 +84,7 @@ Invariants that keep the server directory-compliant and safe:
 ## Git Conventions
 
 - Conventional commit style: `fix(scope): ...`, `feat: ...`
+- Releases are automatic. release-please keeps a release PR open, built from the conventional commits on `main` (`fix` bumps the patch version, `feat` the minor, `!` the major). Merging it bumps the version in `package.json` (which `SERVER_VERSION` reads) and `server.json`, updates `CHANGELOG.md` and tags the release; the MCP Registry workflow then publishes `server.json`. Never bump versions by hand.
 - Never add `Co-Authored-By` trailers, "Generated with Claude Code" footers, or any other AI attribution to commits or PRs
 
 ## Code Style
