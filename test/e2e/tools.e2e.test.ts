@@ -174,6 +174,7 @@ describe('e2e: get_application / get_static_site / get_database / get_platform_o
     strictEqual(res.json.db_user, 'app_user')
     strictEqual(res.json.internal_endpoint, 'main-db.internal:5432')
     strictEqual(res.json.external_endpoint, 'disabled')
+    strictEqual(res.json.tls_enabled, true)
     strictEqual(res.json.internal_connections[0].service_name, 'API')
     strictEqual(res.json.backups[0].type, 'daily')
     ok(!/password/i.test(res.text))
@@ -483,6 +484,25 @@ describe('e2e: environment variables', () => {
     deepStrictEqual(last('createEnvironmentVariableV3').body, { key: 'FEATURE_FLAG', value: 'on', is_buildtime: false })
   })
 
+  it('marks variables secret, keeps an omitted value and needs one for new keys', async () => {
+    const res = await mcp.call('set_environment_variables', {
+      scope: 'application',
+      service_id: IDS.app,
+      variables: [
+        { key: 'DATABASE_URL', secret: true },
+        { key: 'API_TOKEN', value: 't0ken', secret: true },
+        { key: 'NO_VALUE' },
+      ],
+    })
+    deepStrictEqual(res.json.updated, ['DATABASE_URL'])
+    deepStrictEqual(res.json.created, ['API_TOKEN'])
+    deepStrictEqual(res.json.failed, [{ key: 'NO_VALUE', error: 'A new variable needs a value.' }])
+    deepStrictEqual(last('updateEnvironmentVariableV3').body, { is_secret: true })
+    deepStrictEqual(last('createEnvironmentVariableV3').body, { key: 'API_TOKEN', value: 't0ken', is_secret: true })
+    const list = await mcp.call('list_environment_variables', { scope: 'application', service_id: IDS.app })
+    strictEqual(list.json.variables.find((v: any) => v.key === 'API_TOKEN').secret, true)
+  })
+
   it('rejects flags that do not apply to the scope', async () => {
     const site = await mcp.call('set_environment_variables', {
       scope: 'static_site',
@@ -513,9 +533,15 @@ describe('e2e: environment variables', () => {
   it('manages global variables', async () => {
     const res = await mcp.call('set_environment_variables', {
       scope: 'global',
-      variables: [{ key: 'SENTRY_DSN', value: 'x' }],
+      variables: [
+        { key: 'SENTRY_DSN', secret: true },
+        { key: 'STRIPE_KEY', value: 'sk', secret: true },
+      ],
     })
     deepStrictEqual(res.json.updated, ['SENTRY_DSN'])
+    deepStrictEqual(res.json.created, ['STRIPE_KEY'])
+    deepStrictEqual(last('updateGlobalEnvVarV3').body, { is_secret: true })
+    deepStrictEqual(last('createGlobalEnvVarV3').body, { key: 'STRIPE_KEY', value: 'sk', is_secret: true })
     strictEqual(
       last('updateGlobalEnvVarV3').path,
       '/v3/applications/global-env-vars/e3e3e3e3-3333-4333-8333-333333333333',

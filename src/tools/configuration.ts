@@ -9,9 +9,7 @@ type Scope = 'application' | 'static_site' | 'global'
 
 const scope = z
   .enum(['application', 'static_site', 'global'])
-  .describe(
-    'One application, one static site, or global (company-wide variables every application inherits unless it sets the same key).',
-  )
+  .describe('Application, static site, or global (company-wide; applications inherit it unless they set the key).')
 
 const scopedServiceId = uuid('Application or static site ID (list_services). Not used with scope global.').optional()
 
@@ -53,6 +51,7 @@ const summarizeVariable = (variable: ApiRecord) =>
     production: variable.is_production ?? undefined,
     preview: variable.is_preview ?? undefined,
     branch: variable.branch ?? undefined,
+    secret: variable.is_secret === true ? true : undefined,
   })
 
 export const listEnvironmentVariables = readTool({
@@ -70,20 +69,21 @@ export const listEnvironmentVariables = readTool({
 const variableInput = z
   .object({
     key: z.string().min(1).max(255).describe('Name, e.g. DATABASE_URL.'),
-    value: z.string().max(32_768).describe('Value; stored encrypted, never echoed.'),
+    value: z.string().max(32_768).optional().describe('Stored encrypted, never echoed. Omitted: kept.'),
     runtime: z.boolean().optional().describe('Applications, global: available at runtime (new: true).'),
     buildtime: z.boolean().optional().describe('Applications, global: available during builds (new: true).'),
     production: z.boolean().optional().describe('Static sites: used in production (new: true).'),
     preview: z.boolean().optional().describe('Static sites: used in previews (new: true).'),
     branch: z.string().min(1).max(255).optional().describe('Static sites: only this branch.'),
+    secret: z.boolean().optional().describe('Applications, global: value becomes write-only, irreversibly.'),
   })
   .strict()
 
 const bodyFor = (s: Scope, v: z.infer<typeof variableInput>, includeKey: boolean) => {
   if (s === 'static_site') {
-    if (v.runtime !== undefined || v.buildtime !== undefined) {
+    if (v.runtime !== undefined || v.buildtime !== undefined || v.secret !== undefined) {
       throw new ToolInputError(
-        `runtime and buildtime apply to applications and global variables, not static sites (${v.key}).`,
+        `runtime, buildtime and secret apply to applications and global variables, not static sites (${v.key}).`,
       )
     }
     return omitEmpty({
@@ -102,6 +102,7 @@ const bodyFor = (s: Scope, v: z.infer<typeof variableInput>, includeKey: boolean
     value: v.value,
     is_runtime: v.runtime,
     is_buildtime: v.buildtime,
+    is_secret: v.secret,
   })
 }
 
@@ -128,7 +129,7 @@ export const setEnvironmentVariables = writeTool('update', {
   title: 'Set Sevalla environment variables',
   idempotent: true,
   description:
-    'Creates or updates environment variables of a Sevalla application, static site or the company-wide global set; other variables stay unchanged and values are never echoed. Changes apply at the next deployment.',
+    'Creates or updates environment variables of a Sevalla application, static site or the company-wide global set; other variables stay unchanged and values are never echoed.',
   input: z
     .object({
       scope,
@@ -159,6 +160,8 @@ export const setEnvironmentVariables = writeTool('update', {
         if (current) {
           await api.put(`${base}${encodePath`/${current.id}`}`, update)
           updated.push(v.key)
+        } else if (v.value === undefined) {
+          failed.push({ key: v.key, error: 'A new variable needs a value.' })
         } else {
           await api.post(base, create)
           created.push(v.key)

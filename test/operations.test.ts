@@ -30,8 +30,8 @@ const UUID = '12345678-1234-4123-8123-123456789abc'
 
 describe('operation snapshot', () => {
   it('contains every operation of the v3 API exactly once', () => {
-    strictEqual(OPERATIONS.length, 249)
-    strictEqual(new Set(OPERATIONS.map((o) => o.id)).size, 249)
+    strictEqual(OPERATIONS.length, 250)
+    strictEqual(new Set(OPERATIONS.map((o) => o.id)).size, 250)
     for (const o of OPERATIONS) {
       ok(o.path.startsWith('/'), o.id)
       ok(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(o.method), o.id)
@@ -152,7 +152,7 @@ describe('classification', () => {
     for (const o of OPERATIONS.filter((x) => isExecutable(x))) {
       counts[o.class] = (counts[o.class] ?? 0) + 1
     }
-    deepStrictEqual(counts, { read: 60, create: 13, update: 73, delete: 31 })
+    deepStrictEqual(counts, { read: 60, create: 13, update: 74, delete: 31 })
     strictEqual(OPERATIONS.filter((o) => o.dedicatedTool).length, 69)
   })
 
