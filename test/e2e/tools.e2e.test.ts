@@ -491,7 +491,7 @@ describe('e2e: environment variables', () => {
       variables: [
         { key: 'DATABASE_URL', secret: true },
         { key: 'API_TOKEN', value: 't0ken', secret: true },
-        { key: 'NO_VALUE' },
+        { key: 'NO_VALUE', runtime: true },
       ],
     })
     deepStrictEqual(res.json.updated, ['DATABASE_URL'])
@@ -503,6 +503,19 @@ describe('e2e: environment variables', () => {
     strictEqual(list.json.variables.find((v: any) => v.key === 'API_TOKEN').secret, true)
   })
 
+  it('rejects a variable with nothing to set before writing anything', async () => {
+    const before = h.api.requests.length
+    const res = await mcp.call('set_environment_variables', {
+      scope: 'application',
+      service_id: IDS.app,
+      variables: [{ key: 'NODE_ENV' }],
+      redeploy: true,
+    })
+    strictEqual(res.isError, true)
+    ok(res.text.includes('Nothing to set for NODE_ENV'))
+    strictEqual(h.api.requests.length, before)
+  })
+
   it('rejects flags that do not apply to the scope', async () => {
     const site = await mcp.call('set_environment_variables', {
       scope: 'static_site',
@@ -510,6 +523,13 @@ describe('e2e: environment variables', () => {
       variables: [{ key: 'A', value: 'b', runtime: true }],
     })
     strictEqual(site.isError, true)
+    const secret = await mcp.call('set_environment_variables', {
+      scope: 'static_site',
+      service_id: IDS.site,
+      variables: [{ key: 'A', value: 'b', secret: true }],
+    })
+    strictEqual(secret.isError, true)
+    ok(secret.text.includes('not static sites'))
     const global = await mcp.call('set_environment_variables', {
       scope: 'global',
       service_id: IDS.app,

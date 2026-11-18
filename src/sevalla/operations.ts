@@ -284,7 +284,6 @@ const SYNONYMS: Record<string, string[]> = {
   job: ['process'],
   region: ['cluster'],
   location: ['cluster'],
-  ssl: ['tls'],
 }
 
 const bodyFields = (op: Operation) => Object.keys((op.body?.properties ?? {}) as Record<string, unknown>)

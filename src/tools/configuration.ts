@@ -80,6 +80,9 @@ const variableInput = z
   .strict()
 
 const bodyFor = (s: Scope, v: z.infer<typeof variableInput>, includeKey: boolean) => {
+  if (Object.entries(v).every(([field, x]) => field === 'key' || x === undefined)) {
+    throw new ToolInputError(`Nothing to set for ${v.key}: give a value or a flag.`)
+  }
   if (s === 'static_site') {
     if (v.runtime !== undefined || v.buildtime !== undefined || v.secret !== undefined) {
       throw new ToolInputError(
