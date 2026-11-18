@@ -707,6 +707,7 @@ export const startFakeApi = async (): Promise<FakeApi> => {
         internal_port: '5432',
         external_hostname: null,
         external_port: null,
+        tls_enabled: true,
         created_at: iso(-1e7),
         updated_at: iso(-1e6),
       },
@@ -861,6 +862,7 @@ export const startFakeApi = async (): Promise<FakeApi> => {
           value: body.value,
           is_runtime: body.is_runtime ?? true,
           is_buildtime: body.is_buildtime ?? true,
+          is_secret: body.is_secret ?? false,
           created_at: iso(0),
           updated_at: iso(0),
         }

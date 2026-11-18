@@ -146,7 +146,7 @@
       "path": "/api-keys/{id}",
       "tag": "API Keys",
       "summary": "Update API key",
-      "description": "Update an API key's name, roles, or capabilities. When roles or capabilities are provided, they fully replace the existing values. An API key cannot update itself.",
+      "description": "Update an API key's name, roles, or capabilities. When roles or capabilities are provided, they fully replace the existing values. An API key cannot update itself. The API key that AI support manages cannot be changed through the API, so the request returns 403 for it. Use the AI support settings page in the dashboard instead.",
       "params": [
         {
           "name": "id",
@@ -207,7 +207,7 @@
       "path": "/api-keys/{id}",
       "tag": "API Keys",
       "summary": "Delete API key",
-      "description": "Permanently delete an API key. This immediately revokes all access for this key and cannot be undone. An API key cannot delete itself.",
+      "description": "Permanently delete an API key. This immediately revokes all access for this key and cannot be undone. An API key cannot delete itself. The API key that AI support manages cannot be changed through the API, so the request returns 403 for it. Use the AI support settings page in the dashboard instead.",
       "params": [
         {
           "name": "id",
@@ -231,7 +231,7 @@
       "path": "/api-keys/{id}/rotate",
       "tag": "API Keys",
       "summary": "Rotate API key",
-      "description": "Generate a new token for an API key. The old token can optionally remain valid for a transition period (up to 168 hours) to allow graceful migration. The response includes the new raw token, which is only shown once. An API key cannot rotate itself.",
+      "description": "Generate a new token for an API key. The old token can optionally remain valid for a transition period (up to 168 hours) to allow graceful migration. The response includes the new raw token, which is only shown once. An API key cannot rotate itself. The API key that AI support manages cannot be changed through the API, so the request returns 403 for it. Use the AI support settings page in the das…",
       "params": [
         {
           "name": "id",
@@ -266,7 +266,7 @@
       "path": "/api-keys/{id}/toggle",
       "tag": "API Keys",
       "summary": "Toggle API key",
-      "description": "Enable or disable an API key. A disabled API key cannot be used for authentication until it is re-enabled. An API key cannot toggle itself.",
+      "description": "Enable or disable an API key. A disabled API key cannot be used for authentication until it is re-enabled. An API key cannot toggle itself. The API key that AI support manages cannot be changed through the API, so the request returns 403 for it. Use the AI support settings page in the dashboard instead.",
       "params": [
         {
           "name": "id",
@@ -440,7 +440,7 @@
       "path": "/applications/global-env-vars",
       "tag": "Global Environment Variables",
       "summary": "List global environment variables",
-      "description": "Retrieve a paginated list of all company-wide global environment variables. Global variables are inherited by all applications in the company and can be overridden at the application level. Values are returned decrypted.",
+      "description": "Retrieve a paginated list of all company-wide global environment variables. Global variables are inherited by all applications in the company and can be overridden at the application level. Values are returned decrypted, except for secret variables, whose value is always null.",
       "params": [
         {
           "name": "limit",
@@ -502,6 +502,11 @@
             "type": "boolean",
             "description": "Whether this variable is available during the build step. Defaults to true.",
             "default": true
+          },
+          "is_secret": {
+            "type": "boolean",
+            "description": "Mark the variable as secret. Its value can then be replaced but never read back through the API or the dashboard. This cannot be undone. Defaults to false.",
+            "default": false
           }
         },
         "required": ["key", "value"]
@@ -515,7 +520,7 @@
       "path": "/applications/global-env-vars/{id}",
       "tag": "Global Environment Variables",
       "summary": "Update global environment variable",
-      "description": "Update an existing global environment variable. You can change the key, value, or runtime/buildtime flags. A deployment is required for changes to take effect in running applications.",
+      "description": "Update an existing global environment variable. You can change the key, value, or runtime/buildtime flags, or make the variable secret. Leave out value to keep the current one, which is how you change a secret variable without knowing its value. A deployment is required for changes to take effect in running applications.",
       "params": [
         {
           "name": "id",
@@ -550,6 +555,10 @@
           "is_buildtime": {
             "type": "boolean",
             "description": "Whether this variable is available during the build step"
+          },
+          "is_secret": {
+            "type": "boolean",
+            "description": "Set to true to make the variable secret. Its value can then be replaced but never read back. A secret variable cannot be made regular again, so false is rejected for one."
           }
         }
       },
@@ -635,11 +644,11 @@
           },
           "auto_deploy": {
             "type": "boolean",
-            "description": "Enable or disable automatic deployments on every push to the default branch. Only works with privateGit applications - has no effect on publicGit or dockerImage applications."
+            "description": "Enable or disable automatic deployments on every push to the default branch. Only works with privateGit applications - has no effect on publicGit or dockerImage applications. Ignored when the same re…"
           },
           "default_branch": {
             "type": "string",
-            "description": "Git branch used for automatic and manual deployments when no branch is explicitly specified",
+            "description": "Git branch used for automatic and manual deployments when no branch is explicitly specified. Ignored when the same request switches the source to dockerImage or app.",
             "minLength": 1
           },
           "hibernation_enabled": {
@@ -915,7 +924,7 @@
       "path": "/applications/{id}/clone",
       "tag": "Applications",
       "summary": "Clone application",
-      "description": "Create an identical copy of an existing application including its processes, environment variables, build settings, and configuration. The cloned application is created in a new namespace. No deployment is started - start one with the Trigger Deployment endpoint. The clone copies `auto_deploy` from the source, so if it is on, the next push to the default branch deploys the clone with the same env…",
+      "description": "Create an identical copy of an existing application including its processes, environment variables, build settings, and configuration. The cloned application is created in a new namespace and is not added to the pipeline stage of the source application. No deployment is started - start one with the Trigger Deployment endpoint. The clone copies `auto_deploy` from the source, so if it is on, the ne…",
       "params": [
         {
           "name": "id",
@@ -1491,7 +1500,7 @@
         "properties": {
           "domain_name": {
             "type": "string",
-            "description": "The custom domain name to add to the application",
+            "description": "The custom domain name to add to the application. A leading `*.` adds a wildcard domain: `*.example.com` is saved as `example.com` with `is_wildcard` set to true.",
             "minLength": 1
           },
           "is_wildcard": {
@@ -1786,7 +1795,7 @@
       "path": "/applications/{id}/env-vars",
       "tag": "Applications",
       "summary": "List environment variables",
-      "description": "Retrieve a paginated list of all app-level environment variables for an application. Values are returned decrypted. Variables are ordered by creation time.",
+      "description": "Retrieve a paginated list of all app-level environment variables for an application. Values are returned decrypted, except for secret variables, whose value is always null. Variables are ordered by creation time.",
       "params": [
         {
           "name": "limit",
@@ -1871,6 +1880,11 @@
             "type": "boolean",
             "description": "Whether this variable is available during the build step. Defaults to true.",
             "default": true
+          },
+          "is_secret": {
+            "type": "boolean",
+            "description": "Mark the variable as secret. Its value can then be replaced but never read back through the API or the dashboard. This cannot be undone. Defaults to false.",
+            "default": false
           }
         },
         "required": ["key", "value"]
@@ -1884,7 +1898,7 @@
       "path": "/applications/{id}/env-vars/{env_var_id}",
       "tag": "Applications",
       "summary": "Update environment variable",
-      "description": "Update an existing app-level environment variable. You can change the key, value, or runtime/buildtime flags. A deployment is required for changes to take effect.",
+      "description": "Update an existing app-level environment variable. You can change the key, value, or runtime/buildtime flags, or make the variable secret. Leave out value to keep the current one, which is how you change a secret variable without knowing its value. A deployment is required for changes to take effect.",
       "params": [
         {
           "name": "id",
@@ -1930,6 +1944,10 @@
           "is_buildtime": {
             "type": "boolean",
             "description": "Whether this variable is available during the build step"
+          },
+          "is_secret": {
+            "type": "boolean",
+            "description": "Set to true to make the variable secret. Its value can then be replaced but never read back. A secret variable cannot be made regular again, so false is rejected for one."
           }
         }
       },
@@ -2976,7 +2994,7 @@
           },
           "entrypoint": {
             "type": "string",
-            "description": "Command used to start the process. If omitted, defaults to an empty string.",
+            "description": "Command used to start the process. If omitted, defaults to an empty string. Cannot contain the sequence \"{{\".",
             "maxLength": 1024
           },
           "type": {
@@ -3131,7 +3149,7 @@
                 "properties": {
                   "path": {
                     "type": "string",
-                    "description": "Path to access on the HTTP server",
+                    "description": "Path to access on the HTTP server. May contain only URL path and query characters (letters, digits and `-._~!$&'()*+,;=:@%/?[]`).",
                     "nullable": true
                   },
                   "port": {
@@ -3143,7 +3161,8 @@
                   },
                   "host": {
                     "type": "string",
-                    "description": "Host name to connect to",
+                    "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                    "maxLength": 253,
                     "nullable": true
                   },
                   "scheme": {
@@ -3160,11 +3179,11 @@
                       "properties": {
                         "name": {
                           "type": "string",
-                          "description": "Header name"
+                          "description": "Header name. Must be a valid HTTP header name."
                         },
                         "value": {
                           "type": "string",
-                          "description": "Header value"
+                          "description": "Header value. May contain only printable ASCII characters, spaces and tabs."
                         }
                       },
                       "required": ["name", "value"]
@@ -3221,7 +3240,7 @@
                 "properties": {
                   "path": {
                     "type": "string",
-                    "description": "Path to access on the HTTP server",
+                    "description": "Path to access on the HTTP server. May contain only URL path and query characters (letters, digits and `-._~!$&'()*+,;=:@%/?[]`).",
                     "nullable": true
                   },
                   "port": {
@@ -3233,7 +3252,8 @@
                   },
                   "host": {
                     "type": "string",
-                    "description": "Host name to connect to",
+                    "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                    "maxLength": 253,
                     "nullable": true
                   },
                   "scheme": {
@@ -3250,11 +3270,11 @@
                       "properties": {
                         "name": {
                           "type": "string",
-                          "description": "Header name"
+                          "description": "Header name. Must be a valid HTTP header name."
                         },
                         "value": {
                           "type": "string",
-                          "description": "Header value"
+                          "description": "Header value. May contain only printable ASCII characters, spaces and tabs."
                         }
                       },
                       "required": ["name", "value"]
@@ -3384,7 +3404,7 @@
           },
           "entrypoint": {
             "type": "string",
-            "description": "Command used to start the process",
+            "description": "Command used to start the process. Cannot contain the sequence \"{{\".",
             "maxLength": 1024
           },
           "resource_type_id": {
@@ -3543,7 +3563,7 @@
                 "properties": {
                   "path": {
                     "type": "string",
-                    "description": "Path to access on the HTTP server",
+                    "description": "Path to access on the HTTP server. May contain only URL path and query characters (letters, digits and `-._~!$&'()*+,;=:@%/?[]`).",
                     "nullable": true
                   },
                   "port": {
@@ -3555,7 +3575,8 @@
                   },
                   "host": {
                     "type": "string",
-                    "description": "Host name to connect to",
+                    "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                    "maxLength": 253,
                     "nullable": true
                   },
                   "scheme": {
@@ -3572,11 +3593,11 @@
                       "properties": {
                         "name": {
                           "type": "string",
-                          "description": "Header name"
+                          "description": "Header name. Must be a valid HTTP header name."
                         },
                         "value": {
                           "type": "string",
-                          "description": "Header value"
+                          "description": "Header value. May contain only printable ASCII characters, spaces and tabs."
                         }
                       },
                       "required": ["name", "value"]
@@ -3633,7 +3654,7 @@
                 "properties": {
                   "path": {
                     "type": "string",
-                    "description": "Path to access on the HTTP server",
+                    "description": "Path to access on the HTTP server. May contain only URL path and query characters (letters, digits and `-._~!$&'()*+,;=:@%/?[]`).",
                     "nullable": true
                   },
                   "port": {
@@ -3645,7 +3666,8 @@
                   },
                   "host": {
                     "type": "string",
-                    "description": "Host name to connect to",
+                    "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                    "maxLength": 253,
                     "nullable": true
                   },
                   "scheme": {
@@ -3662,11 +3684,11 @@
                       "properties": {
                         "name": {
                           "type": "string",
-                          "description": "Header name"
+                          "description": "Header name. Must be a valid HTTP header name."
                         },
                         "value": {
                           "type": "string",
-                          "description": "Header value"
+                          "description": "Header value. May contain only printable ASCII characters, spaces and tabs."
                         }
                       },
                       "required": ["name", "value"]
@@ -5058,7 +5080,7 @@
       "path": "/databases/{id}",
       "tag": "Databases",
       "summary": "Get database",
-      "description": "Retrieve the full details of a database including connection hostnames, cluster information, and current status.",
+      "description": "Retrieve the full details of a database including connection hostnames, TLS settings with the CA certificate, cluster information, and current status.",
       "params": [
         {
           "name": "id",
@@ -5243,7 +5265,7 @@
           },
           "prefix": {
             "type": "string",
-            "description": "Object key prefix for the dump files inside the bucket. Defaults to a per-database prefix.",
+            "description": "Object key prefix for the dump files inside the bucket. Defaults to a per-database prefix. A custom prefix gets the database folder (`<database name>-<database type>`) appended unless it already ends…",
             "minLength": 1,
             "maxLength": 512
           },
@@ -5260,7 +5282,7 @@
           },
           "endpoint": {
             "type": "string",
-            "description": "S3-compatible endpoint URL of the external storage",
+            "description": "S3-compatible endpoint URL of the external storage. It must resolve to public IP addresses - private, loopback and link-local addresses are rejected with a 400.",
             "format": "uri"
           },
           "region": {
@@ -5348,7 +5370,7 @@
           },
           "prefix": {
             "type": "string",
-            "description": "New object key prefix for the dump files inside the bucket. Pass null to switch back to the default per-database prefix. Existing backups under the old prefix become invisible to the backup list.",
+            "description": "New object key prefix for the dump files inside the bucket. Pass null to switch back to the default per-database prefix. A custom prefix gets the database folder (`<database name>-<database type>`) a…",
             "minLength": 1,
             "maxLength": 512,
             "nullable": true
@@ -5366,7 +5388,7 @@
           },
           "endpoint": {
             "type": "string",
-            "description": "S3-compatible endpoint URL of the external storage",
+            "description": "S3-compatible endpoint URL of the external storage. It must resolve to public IP addresses - private, loopback and link-local addresses are rejected with a 400.",
             "format": "uri"
           },
           "region": {
@@ -5759,7 +5781,7 @@
       "path": "/databases/{id}/external-connection/toggle",
       "tag": "Databases",
       "summary": "Toggle external connection",
-      "description": "Toggle external network access for a database. When enabled, the database becomes accessible from outside the cluster via the external hostname and port. When disabled, the database is only accessible internally. The operation is asynchronous - the database status will reflect the progress.",
+      "description": "Toggle external network access for a database. When enabled, the database becomes accessible from outside the cluster via the external hostname and port. When disabled, the database is only accessible internally. On Redis and Valkey with TLS on (`tls_enabled`), the external connection requires TLS: connect with `rediss://` and verify the server with `tls_ca_certificate`. The operation is asynchro…",
       "params": [
         {
           "name": "id",
@@ -6408,6 +6430,30 @@
       "permissions": ["DATABASE:UPDATE"]
     },
     {
+      "id": "enableDatabaseTlsV3",
+      "method": "POST",
+      "path": "/databases/{id}/tls/enable",
+      "tag": "Databases",
+      "summary": "Enable database TLS",
+      "description": "Turn on TLS for a database on an OCI cluster that was created without it. Databases created on OCI clusters have TLS from the start. Plaintext connections keep working inside the cluster and, for PostgreSQL, MySQL and MariaDB, through the external connection, so existing applications are not affected. On Redis and Valkey the external connection then requires TLS: external clients have to switch t…",
+      "params": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Database identifier",
+          "schema": {
+            "type": "string",
+            "format": "uuid",
+            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+          }
+        }
+      ],
+      "body": null,
+      "bodyRequired": false,
+      "permissions": ["DATABASE:UPDATE"]
+    },
+    {
       "id": "listDockerRegistriesV3",
       "method": "GET",
       "path": "/docker-registries",
@@ -7003,7 +7049,7 @@
         "properties": {
           "domain_name": {
             "type": "string",
-            "description": "The custom domain name to add to the load balancer",
+            "description": "The custom domain name to add to the load balancer. A leading `*.` adds a wildcard domain: `*.example.com` is saved as `example.com` with `is_wildcard` set to true.",
             "minLength": 1
           },
           "is_wildcard": {
@@ -7305,7 +7351,7 @@
           },
           "jurisdiction": {
             "type": "string",
-            "description": "Data residency jurisdiction. Defaults to `default` (no restriction). `default` - no jurisdiction restriction. `eu` - data stored exclusively in the EU. `fedramp` - FedRAMP-compliant storage.",
+            "description": "Data residency jurisdiction. Defaults to `default` (no restriction). `default` - no jurisdiction restriction. `eu` - data stored exclusively in the EU. `fedramp` - FedRAMP-compliant storage. It canno…",
             "enum": ["default", "eu", "fedramp"]
           },
           "public_access": {
@@ -8117,7 +8163,7 @@
                     },
                     "entrypoint": {
                       "type": "string",
-                      "description": "Command used to start the process. If omitted, defaults to an empty string.",
+                      "description": "Command used to start the process. If omitted, defaults to an empty string. Cannot contain the sequence \"{{\".",
                       "maxLength": 1024
                     },
                     "port": {
@@ -8177,27 +8223,15 @@
                     },
                     "liveness_probe": {
                       "type": "object",
-                      "description": "Kubernetes liveness probe configuration. Only applicable to web processes.",
+                      "description": "Kubernetes liveness probe configuration. HTTP GET (`httpGet`) and TCP socket (`tcpSocket`) probes are supported, exec probes are rejected. Only applicable to web processes.",
                       "properties": {
-                        "exec": {
-                          "type": "object",
-                          "description": "Exec-based probe - runs a command inside the container",
-                          "properties": {
-                            "command": {
-                              "type": "array",
-                              "description": "Command to execute inside the container"
-                            }
-                          },
-                          "required": ["command"],
-                          "nullable": true
-                        },
                         "httpGet": {
                           "type": "object",
                           "description": "HTTP GET probe - performs an HTTP GET request",
                           "properties": {
                             "path": {
                               "type": "string",
-                              "description": "Path to access on the HTTP server",
+                              "description": "Path to access on the HTTP server. May contain only URL path and query characters (letters, digits and `-._~!$&'()*+,;=:@%/?[]`).",
                               "nullable": true
                             },
                             "port": {
@@ -8209,7 +8243,8 @@
                             },
                             "host": {
                               "type": "string",
-                              "description": "Host name to connect to",
+                              "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                              "maxLength": 253,
                               "nullable": true
                             },
                             "scheme": {
@@ -8232,7 +8267,8 @@
                           "properties": {
                             "host": {
                               "type": "string",
-                              "description": "Host name to connect to",
+                              "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                              "maxLength": 253,
                               "nullable": true
                             },
                             "port": {
@@ -8284,27 +8320,15 @@
                     },
                     "readiness_probe": {
                       "type": "object",
-                      "description": "Kubernetes readiness probe configuration. Only applicable to web processes.",
+                      "description": "Kubernetes readiness probe configuration. HTTP GET (`httpGet`) and TCP socket (`tcpSocket`) probes are supported, exec probes are rejected. Only applicable to web processes.",
                       "properties": {
-                        "exec": {
-                          "type": "object",
-                          "description": "Exec-based probe - runs a command inside the container",
-                          "properties": {
-                            "command": {
-                              "type": "array",
-                              "description": "Command to execute inside the container"
-                            }
-                          },
-                          "required": ["command"],
-                          "nullable": true
-                        },
                         "httpGet": {
                           "type": "object",
                           "description": "HTTP GET probe - performs an HTTP GET request",
                           "properties": {
                             "path": {
                               "type": "string",
-                              "description": "Path to access on the HTTP server",
+                              "description": "Path to access on the HTTP server. May contain only URL path and query characters (letters, digits and `-._~!$&'()*+,;=:@%/?[]`).",
                               "nullable": true
                             },
                             "port": {
@@ -8316,7 +8340,8 @@
                             },
                             "host": {
                               "type": "string",
-                              "description": "Host name to connect to",
+                              "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                              "maxLength": 253,
                               "nullable": true
                             },
                             "scheme": {
@@ -8339,7 +8364,8 @@
                           "properties": {
                             "host": {
                               "type": "string",
-                              "description": "Host name to connect to",
+                              "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                              "maxLength": 253,
                               "nullable": true
                             },
                             "port": {
@@ -8458,6 +8484,11 @@
                       "type": "boolean",
                       "description": "Whether this variable is available during the build step. Defaults to true.",
                       "default": true
+                    },
+                    "is_secret": {
+                      "type": "boolean",
+                      "description": "Mark the variable as secret. Its value is never returned by the API or shown in the dashboard, and each preview app gets it as a secret variable. Defaults to false.",
+                      "default": false
                     }
                   },
                   "required": ["key", "value"]
@@ -8636,7 +8667,7 @@
                     },
                     "entrypoint": {
                       "type": "string",
-                      "description": "Command used to start the process. If omitted, defaults to an empty string.",
+                      "description": "Command used to start the process. If omitted, defaults to an empty string. Cannot contain the sequence \"{{\".",
                       "maxLength": 1024
                     },
                     "port": {
@@ -8696,27 +8727,15 @@
                     },
                     "liveness_probe": {
                       "type": "object",
-                      "description": "Kubernetes liveness probe configuration. Only applicable to web processes.",
+                      "description": "Kubernetes liveness probe configuration. HTTP GET (`httpGet`) and TCP socket (`tcpSocket`) probes are supported, exec probes are rejected. Only applicable to web processes.",
                       "properties": {
-                        "exec": {
-                          "type": "object",
-                          "description": "Exec-based probe - runs a command inside the container",
-                          "properties": {
-                            "command": {
-                              "type": "array",
-                              "description": "Command to execute inside the container"
-                            }
-                          },
-                          "required": ["command"],
-                          "nullable": true
-                        },
                         "httpGet": {
                           "type": "object",
                           "description": "HTTP GET probe - performs an HTTP GET request",
                           "properties": {
                             "path": {
                               "type": "string",
-                              "description": "Path to access on the HTTP server",
+                              "description": "Path to access on the HTTP server. May contain only URL path and query characters (letters, digits and `-._~!$&'()*+,;=:@%/?[]`).",
                               "nullable": true
                             },
                             "port": {
@@ -8728,7 +8747,8 @@
                             },
                             "host": {
                               "type": "string",
-                              "description": "Host name to connect to",
+                              "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                              "maxLength": 253,
                               "nullable": true
                             },
                             "scheme": {
@@ -8751,7 +8771,8 @@
                           "properties": {
                             "host": {
                               "type": "string",
-                              "description": "Host name to connect to",
+                              "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                              "maxLength": 253,
                               "nullable": true
                             },
                             "port": {
@@ -8803,27 +8824,15 @@
                     },
                     "readiness_probe": {
                       "type": "object",
-                      "description": "Kubernetes readiness probe configuration. Only applicable to web processes.",
+                      "description": "Kubernetes readiness probe configuration. HTTP GET (`httpGet`) and TCP socket (`tcpSocket`) probes are supported, exec probes are rejected. Only applicable to web processes.",
                       "properties": {
-                        "exec": {
-                          "type": "object",
-                          "description": "Exec-based probe - runs a command inside the container",
-                          "properties": {
-                            "command": {
-                              "type": "array",
-                              "description": "Command to execute inside the container"
-                            }
-                          },
-                          "required": ["command"],
-                          "nullable": true
-                        },
                         "httpGet": {
                           "type": "object",
                           "description": "HTTP GET probe - performs an HTTP GET request",
                           "properties": {
                             "path": {
                               "type": "string",
-                              "description": "Path to access on the HTTP server",
+                              "description": "Path to access on the HTTP server. May contain only URL path and query characters (letters, digits and `-._~!$&'()*+,;=:@%/?[]`).",
                               "nullable": true
                             },
                             "port": {
@@ -8835,7 +8844,8 @@
                             },
                             "host": {
                               "type": "string",
-                              "description": "Host name to connect to",
+                              "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                              "maxLength": 253,
                               "nullable": true
                             },
                             "scheme": {
@@ -8858,7 +8868,8 @@
                           "properties": {
                             "host": {
                               "type": "string",
-                              "description": "Host name to connect to",
+                              "description": "Host name to connect to. Must be a hostname or an IP address. Defaults to the pod IP when omitted.",
+                              "maxLength": 253,
                               "nullable": true
                             },
                             "port": {
@@ -8977,6 +8988,11 @@
                       "type": "boolean",
                       "description": "Whether this variable is available during the build step. Defaults to true.",
                       "default": true
+                    },
+                    "is_secret": {
+                      "type": "boolean",
+                      "description": "Mark the variable as secret. Its value is never returned by the API or shown in the dashboard, and each preview app gets it as a secret variable. Defaults to false.",
+                      "default": false
                     }
                   },
                   "required": ["key", "value"]
@@ -9584,7 +9600,7 @@
       "path": "/static-sites",
       "tag": "Static sites",
       "summary": "Create static site",
-      "description": "Create a new static site from a Git repository. No deployment is started - trigger the first one with the Deploy Static Site endpoint. If Sevalla cannot access the Git repository, the request fails with a 400 error that explains why and links to the page where access can be granted (for example the repository access settings of the GitHub App used by Sevalla).",
+      "description": "Create a new static site from a Git repository. No deployment is started - trigger the first one with the Deploy Static Site endpoint. If Sevalla cannot access the Git repository, the request fails with a 400 error that explains why and links to the page where access can be granted (for example the repository access settings of the GitHub App used by Sevalla). The company needs a valid payment me…",
       "params": [],
       "body": {
         "type": "object",
@@ -10263,7 +10279,7 @@
         "properties": {
           "domain_name": {
             "type": "string",
-            "description": "The custom domain name to add to the static site",
+            "description": "The custom domain name to add to the static site. A leading `*.` adds a wildcard domain: `*.example.com` is saved as `example.com` with `is_wildcard` set to true.",
             "minLength": 1
           },
           "is_wildcard": {

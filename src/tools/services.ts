@@ -293,6 +293,7 @@ export const getDatabase = readTool({
         db_user: db.db_user,
         internal_endpoint: endpoint(db.internal_hostname, db.internal_port),
         external_endpoint: endpoint(db.external_hostname, db.external_port) ?? 'disabled',
+        tls_enabled: db.tls_enabled,
         cluster: db.cluster_display_name ?? db.cluster_id,
         project_id: db.project_id,
         backups: [...backups]
