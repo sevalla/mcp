@@ -136,6 +136,15 @@ describe('validateRedirectUri', () => {
     strictEqual(validateRedirectUri('not-a-url'), false)
     strictEqual(validateRedirectUri(''), false)
   })
+
+  it('rejects redirect targets over 253 characters, which the API would not store', () => {
+    const label = 'a'.repeat(63)
+    const host = [label, label, label, 'b'.repeat(58)].join('.')
+    strictEqual(host.length, 250)
+    strictEqual(validateRedirectUri(`https://${host}.com/cb`), false)
+    strictEqual(validateRedirectUri(`https://${host}.co/cb`), true)
+    strictEqual(validateRedirectUri(`myapp://${host}/cb`), false)
+  })
 })
 
 describe('redirectUriMatches', () => {

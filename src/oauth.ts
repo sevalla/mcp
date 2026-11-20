@@ -172,6 +172,8 @@ const BLOCKED_SCHEMES = new Set([
   'wss:',
 ])
 
+const MAX_REDIRECT_TARGET_LENGTH = 253
+
 export const validateRedirectUri = (uri: string): boolean => {
   let url: URL
   try {
@@ -179,7 +181,7 @@ export const validateRedirectUri = (uri: string): boolean => {
   } catch {
     return false
   }
-  if (url.hash) {
+  if (url.hash || redirectTarget(uri).length > MAX_REDIRECT_TARGET_LENGTH) {
     return false
   }
   if (url.protocol === 'https:') {
