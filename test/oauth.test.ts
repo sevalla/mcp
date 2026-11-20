@@ -12,6 +12,7 @@ import {
   validateRedirectUri,
   redirectUriMatches,
   describeClient,
+  redirectTarget,
   getBearerAuthChallenge,
   createOAuthRouter,
   isAcceptedResource,
@@ -181,6 +182,15 @@ describe('isAcceptedResource', () => {
     const started = Date.now()
     strictEqual(isAcceptedResource(`${'/'.repeat(200_000)}x`), false)
     ok(Date.now() - started < 50)
+  })
+})
+
+describe('redirectTarget', () => {
+  it('names the host of web redirect URIs and the scheme and host of native ones', () => {
+    strictEqual(redirectTarget('https://claude.ai/api/mcp/auth_callback'), 'claude.ai')
+    strictEqual(redirectTarget('http://localhost:3118/callback'), 'localhost')
+    strictEqual(redirectTarget('cursor://anysphere.cursor-mcp/oauth/callback'), 'cursor://anysphere.cursor-mcp')
+    strictEqual(redirectTarget('https://bücher.example/cb'), 'xn--bcher-kva.example')
   })
 })
 

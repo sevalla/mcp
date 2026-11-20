@@ -213,9 +213,13 @@ export const redirectUriMatches = (registered: string, requested: string): boole
 
 const MAX_CLIENT_NAME_LENGTH = 40
 
-export const describeClient = (redirectUri: string, clientName?: string): string => {
+export const redirectTarget = (redirectUri: string): string => {
   const url = new URL(redirectUri)
-  const target = url.protocol === 'http:' || url.protocol === 'https:' ? url.hostname : `${url.protocol}//${url.host}`
+  return url.protocol === 'http:' || url.protocol === 'https:' ? url.hostname : `${url.protocol}//${url.host}`
+}
+
+export const describeClient = (redirectUri: string, clientName?: string): string => {
+  const target = redirectTarget(redirectUri)
   const name = (clientName ?? '')
     .replace(/[\p{Cc}\p{Cf}]/gu, '')
     .replace(/\s+/g, ' ')
@@ -262,10 +266,17 @@ export const getClientIp = (c: Context): string | undefined => {
   }
 }
 
-const trustedClientHeaders = (c: Context): Record<string, string> => {
+const trustedClientHeaders = (c: Context, redirectHost?: string): Record<string, string> => {
   const token = process.env.DEVICE_CODE_TRUSTED_CLIENT_TOKEN
   const ip = token ? getClientIp(c) : undefined
-  return token && ip ? { 'x-sevalla-service-token': token, 'x-sevalla-client-ip': ip } : {}
+  if (!token || !ip) {
+    return {}
+  }
+  return {
+    'x-sevalla-service-token': token,
+    'x-sevalla-client-ip': ip,
+    ...(redirectHost ? { 'x-sevalla-redirect-host': redirectHost } : {}),
+  }
 }
 
 export const createOAuthRouter = () => {
@@ -354,7 +365,7 @@ export const createOAuthRouter = () => {
 
     const deviceCodeRes = await fetch(`${getApiBaseUrl()}/v3/auth/device-codes`, {
       method: 'POST',
-      headers: trustedClientHeaders(c),
+      headers: trustedClientHeaders(c, redirectTarget(q.redirect_uri)),
     })
     if (!deviceCodeRes.ok) {
       return c.json({ error: 'device_code_request_failed' }, 502)

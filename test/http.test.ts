@@ -216,6 +216,7 @@ describe('HTTP: OAuth sign-in flow', () => {
     const create = api.forOperation('createDeviceCodeV3')[0]
     strictEqual(create?.headers['x-sevalla-service-token'], 'service-secret')
     strictEqual(create?.headers['x-sevalla-client-ip'], '203.0.113.7')
+    strictEqual(create?.headers['x-sevalla-redirect-host'], new URL(redirectUri).hostname)
     const callback = new URL(consent.searchParams.get('callback') ?? '')
     await app.request(`${callback.pathname}${callback.search}`, {
       redirect: 'manual',
@@ -255,6 +256,7 @@ describe('HTTP: OAuth sign-in flow', () => {
     const headers = await deviceCodeIp({ 'x-forwarded-for': 'not-an-ip' })
     strictEqual(headers?.['x-sevalla-service-token'], undefined)
     strictEqual(headers?.['x-sevalla-client-ip'], undefined)
+    strictEqual(headers?.['x-sevalla-redirect-host'], undefined)
   })
 
   it('omits trusted-client headers when no service token is configured', async () => {
@@ -262,6 +264,7 @@ describe('HTTP: OAuth sign-in flow', () => {
     const clientId = (await (await register()).json()).client_id
     await authorize(clientId, challenge, { 'x-forwarded-for': '203.0.113.7' })
     strictEqual(api.forOperation('createDeviceCodeV3')[0]?.headers['x-sevalla-service-token'], undefined)
+    strictEqual(api.forOperation('createDeviceCodeV3')[0]?.headers['x-sevalla-redirect-host'], undefined)
   })
 
   it('rejects public http redirect URIs at registration', async () => {
