@@ -152,7 +152,13 @@ app.use(
   }),
 )
 
-app.get('/', (c) => c.html(INDEX_HTML))
+app.get('/', (c) =>
+  c.html(INDEX_HTML, 200, {
+    'referrer-policy': 'no-referrer',
+    'x-content-type-options': 'nosniff',
+    'content-security-policy': "frame-ancestors 'none'",
+  }),
+)
 
 const ICON_HEADERS = { 'cache-control': 'public, max-age=86400', 'x-content-type-options': 'nosniff' }
 const SVG_HEADERS = {

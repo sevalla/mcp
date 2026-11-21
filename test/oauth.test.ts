@@ -132,6 +132,27 @@ describe('validateRedirectUri', () => {
     strictEqual(validateRedirectUri('data:text/html,hi'), false)
     strictEqual(validateRedirectUri('file:///etc/passwd'), false)
     strictEqual(validateRedirectUri('https://claude.ai/cb#fragment'), false)
+  })
+
+  it('rejects schemes that open a browser and custom schemes without a host', () => {
+    for (const uri of [
+      'microsoft-edge:https://attacker.example/cb',
+      'MICROSOFT-EDGE:https://attacker.example/cb',
+      'firefox:https://attacker.example/cb',
+      'opera:https://attacker.example/cb',
+      'googlechrome://attacker.example/cb',
+      'googlechromes://attacker.example/cb',
+      'x-safari-https://attacker.example/cb',
+      'brave://attacker.example/cb',
+      'intent://attacker.example/cb#Intent;scheme=https;end',
+      'intent://attacker.example/cb',
+      'myapp:https://attacker.example/cb',
+      'myapp:/callback',
+      'myapp:///https://attacker.example/cb',
+    ]) {
+      strictEqual(validateRedirectUri(uri), false, uri)
+    }
+    strictEqual(validateRedirectUri('myapp://callback'), true)
     strictEqual(validateRedirectUri('not-a-url'), false)
     strictEqual(validateRedirectUri(''), false)
   })
@@ -396,11 +417,9 @@ describe('GET /oauth/authorize', () => {
         state: 'xyz',
       })
       const res = await app.request(`/oauth/authorize?${qs}`, { redirect: 'manual' })
-      strictEqual(res.status, 200)
-      const page = await res.text()
-      ok(page.includes('TESTCODE'))
-      const href = /href="(https:\/\/app\.sevalla\.com[^"]+)"/.exec(page)?.[1] ?? ''
-      const url = new URL(href.replaceAll('&amp;', '&'))
+      strictEqual(res.status, 302)
+      const url = new URL(res.headers.get('location') ?? '')
+      strictEqual(url.hash, '#code=TESTCODE')
       strictEqual(url.origin, 'https://app.sevalla.com')
       strictEqual(url.pathname, '/authorize')
       strictEqual(url.searchParams.get('code'), null)
