@@ -162,10 +162,9 @@ export const decryptClientId = (clientId: string): { redirect_uris: string[] } =
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
-// Native apps whose sign-in the authorize page can hand the code back to; other schemes leave the code field empty.
-const NATIVE_APP_SCHEMES = new Set(['cursor:', 'vscode:', 'vscode-insiders:', 'windsurf:', 'zed:', 'claude:'])
-const DNS_HOST = /^(?:[a-z0-9-]+\.)*[a-z][a-z0-9-]*$/
-const NATIVE_APP_HOST = /^[a-z0-9.-]+$/
+// Exact desktop app callbacks: other paths of these schemes reach other handlers in the app.
+const NATIVE_APP_REDIRECT_URIS = new Set(['cursor://anysphere.cursor-mcp/oauth/callback'])
+const DNS_HOST = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z][a-z0-9-]*$/
 
 const MAX_REDIRECT_TARGET_LENGTH = 253
 
@@ -179,7 +178,7 @@ export const validateRedirectUri = (uri: string): boolean => {
   } catch {
     return false
   }
-  if (url.hash || redirectTarget(uri).length > MAX_REDIRECT_TARGET_LENGTH) {
+  if (url.hash || url.username || url.password || redirectTarget(uri).length > MAX_REDIRECT_TARGET_LENGTH) {
     return false
   }
   if (url.protocol === 'https:') {
@@ -188,7 +187,7 @@ export const validateRedirectUri = (uri: string): boolean => {
   if (url.protocol === 'http:') {
     return LOOPBACK_HOSTS.has(url.hostname)
   }
-  return NATIVE_APP_SCHEMES.has(url.protocol) && NATIVE_APP_HOST.test(url.host)
+  return NATIVE_APP_REDIRECT_URIS.has(url.href)
 }
 
 export const redirectUriMatches = (registered: string, requested: string): boolean => {

@@ -123,17 +123,11 @@ const ACCEPTED_REDIRECT_URIS = [
   'https://vscode.dev/redirect',
   'https://bücher.example/cb',
   'https://xn--bcher-kva.example/cb',
-  'https://localhost/cb',
   'http://localhost:8080/callback',
   'http://127.0.0.1:53682/callback',
   'http://[::1]:3000/cb',
   'cursor://anysphere.cursor-mcp/oauth/callback',
   'CURSOR://anysphere.cursor-mcp/oauth/callback',
-  'vscode://extension/callback',
-  'vscode-insiders://extension/callback',
-  'windsurf://codeium.windsurf/callback',
-  'zed://oauth/callback',
-  'claude://oauth/callback',
 ]
 
 describe('validateRedirectUri', () => {
@@ -144,10 +138,12 @@ describe('validateRedirectUri', () => {
   })
 
   it('records a target the authorize page can pre-fill the code for, for every accepted URI', () => {
-    const prefillable =
-      /^(?:(?:[a-z0-9-]+\.)*[a-z][a-z0-9-]*|localhost|127\.0\.0\.1|\[::1\]|(?:cursor|vscode|vscode-insiders|windsurf|zed|claude):\/\/[a-z0-9.-]+)$/
+    const dnsHost = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z][a-z0-9-]*$/
+    const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]'])
+    const desktopTargets = new Set(['cursor://anysphere.cursor-mcp'])
     for (const uri of ACCEPTED_REDIRECT_URIS) {
-      ok(prefillable.test(redirectTarget(uri)), `${uri} -> ${redirectTarget(uri)}`)
+      const target = redirectTarget(uri)
+      ok(dnsHost.test(target) || loopbackHosts.has(target) || desktopTargets.has(target), `${uri} -> ${target}`)
     }
   })
 
@@ -173,12 +169,17 @@ describe('validateRedirectUri', () => {
       'https://a_b.example/cb',
       'https://example.com./cb',
       'https://example.123/cb',
+      'https://intranet/cb',
+      'https://localhost/cb',
+      'https://user@claude.ai/cb',
+      'https://user:pass@claude.ai/cb',
+      'http://user@localhost:8080/callback',
     ]) {
       strictEqual(validateRedirectUri(uri), false, uri)
     }
   })
 
-  it('rejects schemes outside the supported desktop apps and desktop app URIs without a plain host', () => {
+  it('rejects every desktop app redirect except the exact supported callbacks', () => {
     for (const uri of [
       'myapp://x',
       'myapp://callback',
@@ -190,12 +191,21 @@ describe('validateRedirectUri', () => {
       'x-safari-https://x',
       'brave://attacker.example/cb',
       'intent://attacker.example/cb',
+      'vscode://extension/callback',
+      'vscode://vscode-remote/ssh-remote+x/y',
+      'vscode-insiders://extension/callback',
+      'windsurf://codeium.windsurf/callback',
+      'zed://ssh/x',
+      'claude://oauth/callback',
+      'cursor://vscode-remote/ssh-remote+x/y',
+      'cursor://anysphere.cursor-mcp/other',
+      'cursor://anysphere.cursor-mcp/oauth/callback?x=1',
+      'cursor://anysphere.cursor-mcp:8080/oauth/callback',
+      'cursor://user@anysphere.cursor-mcp/oauth/callback',
+      'cursor://Anysphere.cursor-mcp/oauth/callback',
       'cursor:https://attacker.example/cb',
       'cursor:/callback',
       'cursor:///https://attacker.example/cb',
-      'cursor://Anysphere.cursor-mcp/cb',
-      'cursor://anysphere.cursor-mcp:8080/cb',
-      'vscode://a_b/cb',
     ]) {
       strictEqual(validateRedirectUri(uri), false, uri)
     }
@@ -207,7 +217,6 @@ describe('validateRedirectUri', () => {
     strictEqual(host.length, 250)
     strictEqual(validateRedirectUri(`https://${host}.com/cb`), false)
     strictEqual(validateRedirectUri(`https://${host}.co/cb`), true)
-    strictEqual(validateRedirectUri(`zed://${host}/cb`), false)
   })
 })
 
