@@ -4880,6 +4880,28 @@
       "bodyRequired": false
     },
     {
+      "id": "pollDeviceCodeV3",
+      "method": "GET",
+      "path": "/auth/device-codes/{code}",
+      "tag": "Device Authorization",
+      "summary": "Poll device code status",
+      "description": "Check the current status of a device authorization code. The external client should poll this endpoint at regular intervals (recommended every 5 seconds) until the status changes from `pending`. When approved, the response includes the API key token for a one-time retrieval - the token cannot be fetched again.",
+      "params": [
+        {
+          "name": "code",
+          "in": "path",
+          "required": true,
+          "description": "The device code to check the status of",
+          "schema": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ],
+      "body": null,
+      "bodyRequired": false
+    },
+    {
       "id": "listDatabasesV3",
       "method": "GET",
       "path": "/databases",

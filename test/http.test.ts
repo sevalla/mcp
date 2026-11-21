@@ -164,6 +164,7 @@ describe('HTTP: OAuth sign-in flow', () => {
       device_code: 'secret-device-code',
       approval_secret: 'one-time-secret',
     })
+    strictEqual(api.forOperation('pollDeviceCodeV3').length, 0)
     strictEqual(back.searchParams.get('state'), 'state-1')
     strictEqual(back.searchParams.get('iss'), 'https://mcp.sevalla.com')
     const token = await app.request('/oauth/token', {
