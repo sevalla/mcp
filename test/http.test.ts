@@ -8,6 +8,7 @@ let app: Awaited<typeof import('../src/index.ts')>['app']
 let setShuttingDown: (_value: boolean) => void
 let resetTokenCache: () => void
 let signParams: (_params: Record<string, string>) => string
+let UNSUPPORTED_REDIRECT_URI: string
 let setClientMetadataFetcher: (typeof import('../src/client-metadata.ts'))['__setClientMetadataFetcher']
 
 before(async () => {
@@ -18,7 +19,7 @@ before(async () => {
   app = server.app
   setShuttingDown = server.__setShuttingDown
   resetTokenCache = server.__resetTokenCache
-  signParams = (await import('../src/oauth.ts')).signParams
+  ;({ signParams, UNSUPPORTED_REDIRECT_URI } = await import('../src/oauth.ts'))
   setClientMetadataFetcher = (await import('../src/client-metadata.ts')).__setClientMetadataFetcher
 })
 
@@ -205,11 +206,13 @@ describe('HTTP: OAuth sign-in flow', () => {
     strictEqual((await res.json()).error, 'invalid_target')
   })
 
-  it('rejects a browser-launching redirect URI before creating a device code', async () => {
+  it('rejects an unsupported redirect URI before creating a device code', async () => {
     for (const uri of [
       'microsoft-edge:https://attacker.example/cb',
       'googlechrome://attacker.example/cb',
       'x-safari-https://attacker.example/cb',
+      'myapp://callback',
+      'https://10.0.0.5/cb',
     ]) {
       const qs = new URLSearchParams({
         response_type: 'code',
@@ -221,7 +224,11 @@ describe('HTTP: OAuth sign-in flow', () => {
       })
       const res = await app.request(`/oauth/authorize?${qs}`, { redirect: 'manual' })
       strictEqual(res.status, 400, uri)
-      strictEqual((await res.json()).error, 'invalid_redirect_uri', uri)
+      deepStrictEqual(
+        await res.json(),
+        { error: 'invalid_redirect_uri', error_description: UNSUPPORTED_REDIRECT_URI },
+        uri,
+      )
     }
     strictEqual(api.forOperation('createDeviceCodeV3').length, 0)
   })
@@ -314,7 +321,7 @@ describe('HTTP: OAuth sign-in flow', () => {
   it('rejects public http redirect URIs at registration', async () => {
     const res = await register(['http://evil.example.com/cb'])
     strictEqual(res.status, 400)
-    strictEqual((await res.json()).error, 'invalid_redirect_uris')
+    deepStrictEqual(await res.json(), { error: 'invalid_redirect_uris', error_description: UNSUPPORTED_REDIRECT_URI })
   })
 
   it('reports unsupported grant types with the RFC 6749 error code', async () => {
