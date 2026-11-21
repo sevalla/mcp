@@ -116,45 +116,89 @@ describe('decryptClientId', () => {
   })
 })
 
+const ACCEPTED_REDIRECT_URIS = [
+  'https://claude.ai/api/mcp/auth_callback',
+  'https://Claude.AI/cb',
+  'https://claude.ai:8443/cb',
+  'https://vscode.dev/redirect',
+  'https://bücher.example/cb',
+  'https://xn--bcher-kva.example/cb',
+  'https://localhost/cb',
+  'http://localhost:8080/callback',
+  'http://127.0.0.1:53682/callback',
+  'http://[::1]:3000/cb',
+  'cursor://anysphere.cursor-mcp/oauth/callback',
+  'CURSOR://anysphere.cursor-mcp/oauth/callback',
+  'vscode://extension/callback',
+  'vscode-insiders://extension/callback',
+  'windsurf://codeium.windsurf/callback',
+  'zed://oauth/callback',
+  'claude://oauth/callback',
+]
+
 describe('validateRedirectUri', () => {
-  it('allows https, loopback http and native app schemes', () => {
-    strictEqual(validateRedirectUri('https://claude.ai/api/mcp/auth_callback'), true)
-    strictEqual(validateRedirectUri('http://localhost:8080/callback'), true)
-    strictEqual(validateRedirectUri('http://127.0.0.1:53682/callback'), true)
-    strictEqual(validateRedirectUri('http://[::1]:3000/cb'), true)
-    strictEqual(validateRedirectUri('cursor://anysphere.cursor-mcp/oauth/callback'), true)
-    strictEqual(validateRedirectUri('vscode://extension/callback'), true)
+  it('allows https DNS hosts, loopback http and supported desktop apps', () => {
+    for (const uri of ACCEPTED_REDIRECT_URIS) {
+      strictEqual(validateRedirectUri(uri), true, uri)
+    }
+  })
+
+  it('records a target the authorize page can pre-fill the code for, for every accepted URI', () => {
+    const prefillable =
+      /^(?:(?:[a-z0-9-]+\.)*[a-z][a-z0-9-]*|localhost|127\.0\.0\.1|\[::1\]|(?:cursor|vscode|vscode-insiders|windsurf|zed|claude):\/\/[a-z0-9.-]+)$/
+    for (const uri of ACCEPTED_REDIRECT_URIS) {
+      ok(prefillable.test(redirectTarget(uri)), `${uri} -> ${redirectTarget(uri)}`)
+    }
   })
 
   it('rejects plain http on public hosts, script schemes, fragments and invalid URIs', () => {
-    strictEqual(validateRedirectUri('http://evil.com/callback'), false)
-    strictEqual(validateRedirectUri('javascript:alert(1)'), false)
-    strictEqual(validateRedirectUri('data:text/html,hi'), false)
-    strictEqual(validateRedirectUri('file:///etc/passwd'), false)
-    strictEqual(validateRedirectUri('https://claude.ai/cb#fragment'), false)
-  })
-
-  it('rejects schemes that open a browser and custom schemes without a host', () => {
     for (const uri of [
-      'microsoft-edge:https://attacker.example/cb',
-      'MICROSOFT-EDGE:https://attacker.example/cb',
-      'firefox:https://attacker.example/cb',
-      'opera:https://attacker.example/cb',
-      'googlechrome://attacker.example/cb',
-      'googlechromes://attacker.example/cb',
-      'x-safari-https://attacker.example/cb',
-      'brave://attacker.example/cb',
-      'intent://attacker.example/cb#Intent;scheme=https;end',
-      'intent://attacker.example/cb',
-      'myapp:https://attacker.example/cb',
-      'myapp:/callback',
-      'myapp:///https://attacker.example/cb',
+      'http://evil.com/callback',
+      'javascript:alert(1)',
+      'data:text/html,hi',
+      'file:///etc/passwd',
+      'https://claude.ai/cb#fragment',
+      'not-a-url',
+      '',
     ]) {
       strictEqual(validateRedirectUri(uri), false, uri)
     }
-    strictEqual(validateRedirectUri('myapp://callback'), true)
-    strictEqual(validateRedirectUri('not-a-url'), false)
-    strictEqual(validateRedirectUri(''), false)
+  })
+
+  it('rejects https IP literals and hosts the authorize page cannot name', () => {
+    for (const uri of [
+      'https://10.0.0.5/cb',
+      'https://0x7f.1/cb',
+      'https://[::1]/cb',
+      'https://a_b.example/cb',
+      'https://example.com./cb',
+      'https://example.123/cb',
+    ]) {
+      strictEqual(validateRedirectUri(uri), false, uri)
+    }
+  })
+
+  it('rejects schemes outside the supported desktop apps and desktop app URIs without a plain host', () => {
+    for (const uri of [
+      'myapp://x',
+      'myapp://callback',
+      'microsoft-edge:https://attacker.example/cb',
+      'MICROSOFT-EDGE:https://attacker.example/cb',
+      'firefox:https://attacker.example/cb',
+      'googlechrome://x',
+      'googlechromes://attacker.example/cb',
+      'x-safari-https://x',
+      'brave://attacker.example/cb',
+      'intent://attacker.example/cb',
+      'cursor:https://attacker.example/cb',
+      'cursor:/callback',
+      'cursor:///https://attacker.example/cb',
+      'cursor://Anysphere.cursor-mcp/cb',
+      'cursor://anysphere.cursor-mcp:8080/cb',
+      'vscode://a_b/cb',
+    ]) {
+      strictEqual(validateRedirectUri(uri), false, uri)
+    }
   })
 
   it('rejects redirect targets over 253 characters, which the API would not store', () => {
@@ -163,7 +207,7 @@ describe('validateRedirectUri', () => {
     strictEqual(host.length, 250)
     strictEqual(validateRedirectUri(`https://${host}.com/cb`), false)
     strictEqual(validateRedirectUri(`https://${host}.co/cb`), true)
-    strictEqual(validateRedirectUri(`myapp://${host}/cb`), false)
+    strictEqual(validateRedirectUri(`zed://${host}/cb`), false)
   })
 })
 

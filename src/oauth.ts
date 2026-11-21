@@ -162,21 +162,15 @@ export const decryptClientId = (clientId: string): { redirect_uris: string[] } =
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
-const BLOCKED_SCHEMES = new Set([
-  'javascript:',
-  'data:',
-  'file:',
-  'vbscript:',
-  'blob:',
-  'about:',
-  'ftp:',
-  'ws:',
-  'wss:',
-])
-// Schemes that open a browser on an arbitrary URL, so the host shown on the authorize page would not be the destination.
-const BROWSER_SCHEMES = /^(microsoft-edge|x-safari-[a-z0-9+.-]*|googlechromes?|firefox|opera|brave|intent):$/
+// Native apps whose sign-in the authorize page can hand the code back to; other schemes leave the code field empty.
+const NATIVE_APP_SCHEMES = new Set(['cursor:', 'vscode:', 'vscode-insiders:', 'windsurf:', 'zed:', 'claude:'])
+const DNS_HOST = /^(?:[a-z0-9-]+\.)*[a-z][a-z0-9-]*$/
+const NATIVE_APP_HOST = /^[a-z0-9.-]+$/
 
 const MAX_REDIRECT_TARGET_LENGTH = 253
+
+export const UNSUPPORTED_REDIRECT_URI =
+  "This redirect URI isn't supported. Use https, a loopback address, or a supported desktop app."
 
 export const validateRedirectUri = (uri: string): boolean => {
   let url: URL
@@ -189,17 +183,12 @@ export const validateRedirectUri = (uri: string): boolean => {
     return false
   }
   if (url.protocol === 'https:') {
-    return true
+    return DNS_HOST.test(url.hostname)
   }
   if (url.protocol === 'http:') {
     return LOOPBACK_HOSTS.has(url.hostname)
   }
-  return (
-    !BLOCKED_SCHEMES.has(url.protocol) &&
-    !BROWSER_SCHEMES.test(url.protocol) &&
-    /^[a-z][a-z0-9+.-]*:$/.test(url.protocol) &&
-    url.host !== ''
-  )
+  return NATIVE_APP_SCHEMES.has(url.protocol) && NATIVE_APP_HOST.test(url.host)
 }
 
 export const redirectUriMatches = (registered: string, requested: string): boolean => {
@@ -297,7 +286,7 @@ export const createOAuthRouter = () => {
     }
     for (const uri of redirectUris) {
       if (typeof uri !== 'string' || !validateRedirectUri(uri)) {
-        return c.json({ error: 'invalid_redirect_uris' }, 400)
+        return c.json({ error: 'invalid_redirect_uris', error_description: UNSUPPORTED_REDIRECT_URI }, 400)
       }
     }
     const clientId = encrypt(JSON.stringify({ type: 'registration', redirect_uris: redirectUris }))
@@ -326,7 +315,7 @@ export const createOAuthRouter = () => {
     }
 
     if (!validateRedirectUri(q.redirect_uri)) {
-      return c.json({ error: 'invalid_redirect_uri' }, 400)
+      return c.json({ error: 'invalid_redirect_uri', error_description: UNSUPPORTED_REDIRECT_URI }, 400)
     }
 
     if (!isAcceptedResource(q.resource)) {
