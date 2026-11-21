@@ -173,6 +173,8 @@ const BLOCKED_SCHEMES = new Set([
   'ws:',
   'wss:',
 ])
+// Schemes that open a browser on an arbitrary URL, so the host shown on the authorize page would not be the destination.
+const BROWSER_SCHEMES = /^(microsoft-edge|x-safari-[a-z0-9+.-]*|googlechromes?|firefox|opera|brave|intent):$/
 
 const MAX_REDIRECT_TARGET_LENGTH = 253
 
@@ -192,7 +194,12 @@ export const validateRedirectUri = (uri: string): boolean => {
   if (url.protocol === 'http:') {
     return LOOPBACK_HOSTS.has(url.hostname)
   }
-  return !BLOCKED_SCHEMES.has(url.protocol) && /^[a-z][a-z0-9+.-]*:$/.test(url.protocol)
+  return (
+    !BLOCKED_SCHEMES.has(url.protocol) &&
+    !BROWSER_SCHEMES.test(url.protocol) &&
+    /^[a-z][a-z0-9+.-]*:$/.test(url.protocol) &&
+    url.host !== ''
+  )
 }
 
 export const redirectUriMatches = (registered: string, requested: string): boolean => {

@@ -132,6 +132,27 @@ describe('validateRedirectUri', () => {
     strictEqual(validateRedirectUri('data:text/html,hi'), false)
     strictEqual(validateRedirectUri('file:///etc/passwd'), false)
     strictEqual(validateRedirectUri('https://claude.ai/cb#fragment'), false)
+  })
+
+  it('rejects schemes that open a browser and custom schemes without a host', () => {
+    for (const uri of [
+      'microsoft-edge:https://attacker.example/cb',
+      'MICROSOFT-EDGE:https://attacker.example/cb',
+      'firefox:https://attacker.example/cb',
+      'opera:https://attacker.example/cb',
+      'googlechrome://attacker.example/cb',
+      'googlechromes://attacker.example/cb',
+      'x-safari-https://attacker.example/cb',
+      'brave://attacker.example/cb',
+      'intent://attacker.example/cb#Intent;scheme=https;end',
+      'intent://attacker.example/cb',
+      'myapp:https://attacker.example/cb',
+      'myapp:/callback',
+      'myapp:///https://attacker.example/cb',
+    ]) {
+      strictEqual(validateRedirectUri(uri), false, uri)
+    }
+    strictEqual(validateRedirectUri('myapp://callback'), true)
     strictEqual(validateRedirectUri('not-a-url'), false)
     strictEqual(validateRedirectUri(''), false)
   })

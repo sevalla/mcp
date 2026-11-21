@@ -841,7 +841,6 @@ export const startFakeApi = async (): Promise<FakeApi> => {
       status: 201,
       body: { user_code: 'DEVICE12', device_code: 'secret-device-code', code: 'DEVICE12', expires_at: iso(300_000) },
     }),
-    pollDeviceCodeV3: () => ({ body: { status: 'approved', token: TOKENS.valid } }),
     exchangeDeviceCodeV3: ({ body }) =>
       body.device_code === 'secret-device-code'
         ? { body: { status: 'approved', token: TOKENS.valid } }
@@ -953,7 +952,7 @@ export const startFakeApi = async (): Promise<FakeApi> => {
     if (!route) {
       return send(404, { message: `No route for ${req.method} ${url.pathname}`, status: 404 })
     }
-    const isAuthRoute = ['createDeviceCodeV3', 'pollDeviceCodeV3', 'exchangeDeviceCodeV3'].includes(route.op.id)
+    const isAuthRoute = ['createDeviceCodeV3', 'exchangeDeviceCodeV3'].includes(route.op.id)
     if (!isAuthRoute && (!token || !validTokens.has(token))) {
       return send(401, { message: 'Unauthorized', status: 401, data: { code: 'err-401' } })
     }

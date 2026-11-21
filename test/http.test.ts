@@ -69,7 +69,11 @@ const pkce = () => {
 
 describe('HTTP: public and discovery endpoints', () => {
   it('serves the landing page, health and glama manifest', async () => {
-    strictEqual((await app.request('/')).status, 200)
+    const landing = await app.request('/')
+    strictEqual(landing.status, 200)
+    strictEqual(landing.headers.get('referrer-policy'), 'no-referrer')
+    strictEqual(landing.headers.get('x-content-type-options'), 'nosniff')
+    strictEqual(landing.headers.get('content-security-policy'), "frame-ancestors 'none'")
     deepStrictEqual(await (await app.request('/health')).json(), { status: 'ok' })
     strictEqual(
       (await (await app.request('/.well-known/glama.json')).json()).$schema,
@@ -160,7 +164,6 @@ describe('HTTP: OAuth sign-in flow', () => {
       device_code: 'secret-device-code',
       approval_secret: 'one-time-secret',
     })
-    strictEqual(api.forOperation('pollDeviceCodeV3').length, 0)
     strictEqual(back.searchParams.get('state'), 'state-1')
     strictEqual(back.searchParams.get('iss'), 'https://mcp.sevalla.com')
     const token = await app.request('/oauth/token', {
@@ -200,6 +203,27 @@ describe('HTTP: OAuth sign-in flow', () => {
     const res = await app.request(`/oauth/authorize?${qs}`)
     strictEqual(res.status, 400)
     strictEqual((await res.json()).error, 'invalid_target')
+  })
+
+  it('rejects a browser-launching redirect URI before creating a device code', async () => {
+    for (const uri of [
+      'microsoft-edge:https://attacker.example/cb',
+      'googlechrome://attacker.example/cb',
+      'x-safari-https://attacker.example/cb',
+    ]) {
+      const qs = new URLSearchParams({
+        response_type: 'code',
+        client_id: 'https://claude.ai/oauth/mcp-oauth-client-metadata',
+        redirect_uri: uri,
+        code_challenge: pkce().challenge,
+        code_challenge_method: 'S256',
+        state: 's',
+      })
+      const res = await app.request(`/oauth/authorize?${qs}`, { redirect: 'manual' })
+      strictEqual(res.status, 400, uri)
+      strictEqual((await res.json()).error, 'invalid_redirect_uri', uri)
+    }
+    strictEqual(api.forOperation('createDeviceCodeV3').length, 0)
   })
 
   it('accepts the MCP URL or origin as the resource parameter', async () => {
