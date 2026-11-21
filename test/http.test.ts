@@ -351,7 +351,11 @@ describe('HTTP: OAuth sign-in flow', () => {
     const page = await res.text()
     ok(!page.includes('<script>'))
     ok(page.includes('&lt;script&gt;'))
-    ok(res.headers.get('content-security-policy')?.includes("frame-ancestors 'none'"))
+    strictEqual(
+      res.headers.get('content-security-policy'),
+      "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+    )
+    strictEqual(res.headers.get('referrer-policy'), 'no-referrer')
     strictEqual(res.headers.get('cache-control'), 'no-store')
   })
 
