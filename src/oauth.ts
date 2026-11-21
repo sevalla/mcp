@@ -9,7 +9,6 @@ import {
   isClientMetadataUrl,
   resolveClientMetadata,
 } from './client-metadata.ts'
-import { signInPage } from './sign-in-page.ts'
 import { getApiBaseUrl } from './sevalla/client.ts'
 
 export const MCP_PATHS = ['/mcp'] as const
@@ -382,11 +381,12 @@ export const createOAuthRouter = () => {
 
     const sevallaUrl = new URL('/authorize', SEVALLA_FRONTEND_URL)
     sevallaUrl.searchParams.set('callback', callbackUrl.toString())
+    // The fragment keeps the user code out of server logs and Referer headers.
+    sevallaUrl.hash = `code=${encodeURIComponent(userCode)}`
 
     c.header('Cache-Control', 'no-store')
     c.header('Referrer-Policy', 'no-referrer')
-    c.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
-    return c.html(signInPage({ userCode, redirectHost, continueUrl: sevallaUrl.toString() }))
+    return c.redirect(sevallaUrl.toString(), 302)
   })
 
   router.get(CALLBACK_PATH, async (c) => {

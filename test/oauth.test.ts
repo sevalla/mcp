@@ -396,11 +396,9 @@ describe('GET /oauth/authorize', () => {
         state: 'xyz',
       })
       const res = await app.request(`/oauth/authorize?${qs}`, { redirect: 'manual' })
-      strictEqual(res.status, 200)
-      const page = await res.text()
-      ok(page.includes('TESTCODE'))
-      const href = /href="(https:\/\/app\.sevalla\.com[^"]+)"/.exec(page)?.[1] ?? ''
-      const url = new URL(href.replaceAll('&amp;', '&'))
+      strictEqual(res.status, 302)
+      const url = new URL(res.headers.get('location') ?? '')
+      strictEqual(url.hash, '#code=TESTCODE')
       strictEqual(url.origin, 'https://app.sevalla.com')
       strictEqual(url.pathname, '/authorize')
       strictEqual(url.searchParams.get('code'), null)
