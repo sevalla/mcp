@@ -1,5 +1,5 @@
 import { describe, it, mock } from 'node:test'
-import { strictEqual, ok, notStrictEqual, throws } from 'node:assert'
+import { strictEqual, ok, notStrictEqual, throws, deepStrictEqual } from 'node:assert'
 import { createHash } from 'node:crypto'
 import { Hono } from 'hono'
 import {
@@ -11,7 +11,6 @@ import {
   decryptClientId,
   validateRedirectUri,
   redirectUriMatches,
-  describeClient,
   redirectTarget,
   getBearerAuthChallenge,
   createOAuthRouter,
@@ -203,15 +202,6 @@ describe('redirectTarget', () => {
   })
 })
 
-describe('describeClient', () => {
-  it('names the host of the redirect URI', () => {
-    strictEqual(describeClient('https://claude.ai/api/mcp/auth_callback'), 'claude.ai')
-    strictEqual(describeClient('http://localhost:3118/callback'), 'localhost')
-    strictEqual(describeClient('cursor://anysphere.cursor-mcp/oauth/callback'), 'cursor://anysphere.cursor-mcp')
-    strictEqual(describeClient('https://claude.ai/api/mcp/auth_callback', 'Claude'), 'claude.ai - Claude')
-  })
-})
-
 describe('well-known endpoints', () => {
   const app = new Hono()
   app.route('', createOAuthRouter())
@@ -379,16 +369,21 @@ describe('GET /oauth/authorize', () => {
   const app = new Hono()
   app.route('', createOAuthRouter())
 
-  it('redirects to Sevalla authorize with signed callback params', async () => {
+  it('shows the user code and links to Sevalla authorize with signed callback params', async () => {
     process.env.PUBLIC_URL = 'https://mcp.sevalla.com'
     const clientId = makeClientId(['http://localhost:8080/callback'])
     const originalFetch = globalThis.fetch
     globalThis.fetch = mock.fn(
       async () =>
-        new Response(JSON.stringify({ code: 'TESTCODE', expires_at: new Date(Date.now() + 300_000).toISOString() }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(
+          JSON.stringify({
+            user_code: 'TESTCODE',
+            device_code: 'secret-device-code',
+            code: 'TESTCODE',
+            expires_at: new Date(Date.now() + 300_000).toISOString(),
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
     ) as typeof fetch
 
     try {
@@ -401,21 +396,24 @@ describe('GET /oauth/authorize', () => {
         state: 'xyz',
       })
       const res = await app.request(`/oauth/authorize?${qs}`, { redirect: 'manual' })
-      strictEqual(res.status, 302)
-      const location = res.headers.get('location') ?? ''
-      const url = new URL(location)
+      strictEqual(res.status, 200)
+      const page = await res.text()
+      ok(page.includes('TESTCODE'))
+      const href = /href="(https:\/\/app\.sevalla\.com[^"]+)"/.exec(page)?.[1] ?? ''
+      const url = new URL(href.replaceAll('&amp;', '&'))
       strictEqual(url.origin, 'https://app.sevalla.com')
       strictEqual(url.pathname, '/authorize')
-      strictEqual(url.searchParams.get('code'), 'TESTCODE')
-      strictEqual(url.searchParams.get('name'), 'Sevalla MCP (localhost)')
+      strictEqual(url.searchParams.get('code'), null)
+      strictEqual(url.searchParams.get('name'), null)
 
       const callbackUrl = new URL(url.searchParams.get('callback') ?? '')
-      strictEqual(callbackUrl.pathname, '/oauth/callback/TESTCODE')
+      strictEqual(callbackUrl.pathname, '/oauth/callback/device')
+      ok(!callbackUrl.href.includes('TESTCODE'))
       strictEqual(callbackUrl.searchParams.get('redirect_uri'), 'http://localhost:8080/callback')
       strictEqual(callbackUrl.searchParams.get('code_challenge'), 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM')
       strictEqual(callbackUrl.searchParams.get('client_id'), clientId)
       strictEqual(callbackUrl.searchParams.get('state'), 'xyz')
-      strictEqual(callbackUrl.searchParams.get('device_code'), 'TESTCODE')
+      strictEqual(decrypt(callbackUrl.searchParams.get('device_code') ?? '', 'aes:device-code'), 'secret-device-code')
       ok(callbackUrl.searchParams.get('expires_at'))
       ok(callbackUrl.searchParams.get('sig'))
 
@@ -527,7 +525,7 @@ describe('GET /oauth/authorize', () => {
   })
 })
 
-describe('GET /oauth/callback/:deviceCode', () => {
+describe('GET /oauth/callback/device', () => {
   const app = new Hono()
   app.route('', createOAuthRouter())
 
@@ -538,23 +536,26 @@ describe('GET /oauth/callback/:deviceCode', () => {
       code_challenge: 'test-challenge',
       client_id: clientId,
       state: 'test-state',
-      device_code: 'APPROVED1',
+      device_code: encrypt('approved-device-code', 'aes:device-code'),
       expires_at: (Date.now() + 300_000).toString(),
     }
     const sig = signParams(params)
     const qs = new URLSearchParams({ ...params, sig }).toString()
 
     const originalFetch = globalThis.fetch
-    globalThis.fetch = mock.fn(
-      async () =>
+    const fetchMock = mock.fn(
+      async (_url: string, _init: RequestInit) =>
         new Response(JSON.stringify({ status: 'approved', token: 'svl_testtoken123' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
-    ) as typeof fetch
+    )
+    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     try {
-      const res = await app.request(`/oauth/callback/APPROVED1?${qs}`, { redirect: 'manual' })
+      const res = await app.request(`/oauth/callback/device?${qs}&approval_secret=one-time-secret`, {
+        redirect: 'manual',
+      })
       strictEqual(res.status, 302)
       const location = new URL(res.headers.get('location') ?? '')
       strictEqual(location.origin, 'http://localhost:8080')
@@ -568,6 +569,13 @@ describe('GET /oauth/callback/:deviceCode', () => {
       strictEqual(stored.client_id, clientId)
       strictEqual(stored.code_challenge, 'test-challenge')
       strictEqual(stored.redirect_uri, 'http://localhost:8080/callback')
+      const [url, init] = fetchMock.mock.calls[0]?.arguments ?? []
+      ok(String(url).endsWith('/v3/auth/device-codes/token'))
+      strictEqual(init?.method, 'POST')
+      deepStrictEqual(JSON.parse(String(init?.body)), {
+        device_code: 'approved-device-code',
+        approval_secret: 'one-time-secret',
+      })
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -580,7 +588,7 @@ describe('GET /oauth/callback/:deviceCode', () => {
       code_challenge: 'c',
       client_id: clientId,
       state: 'denied-state',
-      device_code: 'DENIED1',
+      device_code: encrypt('denied-device-code', 'aes:device-code'),
       expires_at: (Date.now() + 300_000).toString(),
     }
     const sig = signParams(params)
@@ -596,7 +604,7 @@ describe('GET /oauth/callback/:deviceCode', () => {
     ) as typeof fetch
 
     try {
-      const res = await app.request(`/oauth/callback/DENIED1?${qs}`, { redirect: 'manual' })
+      const res = await app.request(`/oauth/callback/device?${qs}`, { redirect: 'manual' })
       strictEqual(res.status, 302)
       const location = new URL(res.headers.get('location') ?? '')
       strictEqual(location.searchParams.get('error'), 'access_denied')
@@ -607,7 +615,7 @@ describe('GET /oauth/callback/:deviceCode', () => {
   })
 
   it('returns 400 for missing signed params', async () => {
-    const res = await app.request('/oauth/callback/NONEXISTENT')
+    const res = await app.request('/oauth/callback/device')
     strictEqual(res.status, 400)
   })
 
@@ -622,7 +630,7 @@ describe('GET /oauth/callback/:deviceCode', () => {
       sig: 'invalid-signature',
     }).toString()
 
-    const res = await app.request(`/oauth/callback/TAMPERED?${qs}`)
+    const res = await app.request(`/oauth/callback/device?${qs}`)
     strictEqual(res.status, 403)
   })
 })

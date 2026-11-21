@@ -119,6 +119,7 @@ const METRIC_PATH = /\/metrics\//
 const UNAVAILABLE: Record<string, string> = {
   createDeviceCodeV3: 'Device authorization is part of the sign-in flow and is not available as a tool.',
   pollDeviceCodeV3: 'Device authorization is part of the sign-in flow and is not available as a tool.',
+  exchangeDeviceCodeV3: 'Device authorization is part of the sign-in flow and is not available as a tool.',
   openTerminalV3: 'Interactive terminal sessions need a WebSocket client and are not available as a tool.',
 }
 

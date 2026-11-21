@@ -9,6 +9,7 @@ import {
   isClientMetadataUrl,
   resolveClientMetadata,
 } from './client-metadata.ts'
+import { signInPage } from './sign-in-page.ts'
 import { getApiBaseUrl } from './sevalla/client.ts'
 
 export const MCP_PATHS = ['/mcp'] as const
@@ -19,6 +20,8 @@ const MAX_OAUTH_BODY_BYTES = 16_384
 const MCP_SCOPE = 'mcp:tools'
 const CODE_KEY = 'aes:code'
 const ACCESS_TOKEN_KEY = 'aes:access'
+const DEVICE_CODE_KEY = 'aes:device-code'
+export const CALLBACK_PATH = '/oauth/callback/device'
 export const verifyPkce = (verifier: string, challenge: string): boolean =>
   createHash('sha256').update(verifier).digest('base64url') === challenge
 
@@ -213,36 +216,15 @@ export const redirectUriMatches = (registered: string, requested: string): boole
   }
 }
 
-const MAX_CLIENT_NAME_LENGTH = 40
-
 export const redirectTarget = (redirectUri: string): string => {
   const url = new URL(redirectUri)
   return url.protocol === 'http:' || url.protocol === 'https:' ? url.hostname : `${url.protocol}//${url.host}`
 }
 
-export const describeClient = (redirectUri: string, clientName?: string): string => {
-  const target = redirectTarget(redirectUri)
-  const name = (clientName ?? '')
-    .replace(/[\p{Cc}\p{Cf}]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_CLIENT_NAME_LENGTH)
-    .trim()
-  return name ? `${target} - ${name}` : target
-}
-
-interface AuthorizingClient {
-  name?: string
-  redirectUris: string[]
-}
-
-const resolveAuthorizingClient = async (clientId: string, requester: string): Promise<AuthorizingClient> => {
-  if (isClientMetadataUrl(clientId)) {
-    const metadata = await resolveClientMetadata(clientId, requester)
-    return { name: metadata.clientName, redirectUris: metadata.redirectUris }
-  }
-  return { redirectUris: decryptClientId(clientId).redirect_uris }
-}
+const resolveRedirectUris = async (clientId: string, requester: string): Promise<string[]> =>
+  isClientMetadataUrl(clientId)
+    ? (await resolveClientMetadata(clientId, requester)).redirectUris
+    : decryptClientId(clientId).redirect_uris
 
 const trustedProxyHops = () => {
   const hops = parseInt(process.env.TRUSTED_PROXY_HOPS || '1', 10)
@@ -345,9 +327,9 @@ export const createOAuthRouter = () => {
       return c.json({ error: 'invalid_target' }, 400)
     }
 
-    let client: AuthorizingClient
+    let redirectUris: string[]
     try {
-      client = await resolveAuthorizingClient(q.client_id, getClientIp(c) ?? 'unknown')
+      redirectUris = await resolveRedirectUris(q.client_id, getClientIp(c) ?? 'unknown')
     } catch (err) {
       if (err instanceof ClientMetadataUnavailableError) {
         return c.json({ error: 'temporarily_unavailable', error_description: err.message }, err.status)
@@ -361,47 +343,53 @@ export const createOAuthRouter = () => {
       return c.json({ error: 'invalid_client' }, 401)
     }
 
-    if (!client.redirectUris.some((uri) => redirectUriMatches(uri, q.redirect_uri as string))) {
+    if (!redirectUris.some((uri) => redirectUriMatches(uri, q.redirect_uri as string))) {
       return c.json({ error: 'invalid_redirect_uri' }, 400)
     }
 
+    const redirectHost = redirectTarget(q.redirect_uri)
     const deviceCodeRes = await fetch(`${getApiBaseUrl()}/v3/auth/device-codes`, {
       method: 'POST',
-      headers: trustedClientHeaders(c, redirectTarget(q.redirect_uri)),
+      headers: trustedClientHeaders(c, redirectHost),
     })
     if (!deviceCodeRes.ok) {
       return c.json({ error: 'device_code_request_failed' }, 502)
     }
 
-    const { code: deviceCode } = (await deviceCodeRes.json()) as { code: string }
+    const { user_code: userCode, device_code: deviceCode } = (await deviceCodeRes.json()) as {
+      user_code?: string
+      device_code?: string
+    }
+    if (!userCode || !deviceCode) {
+      return c.json({ error: 'device_code_request_failed' }, 502)
+    }
 
     const params: Record<string, string> = {
       redirect_uri: q.redirect_uri,
       code_challenge: q.code_challenge,
       client_id: q.client_id,
       state: q.state,
-      device_code: deviceCode,
+      device_code: encrypt(deviceCode, DEVICE_CODE_KEY),
       expires_at: (Date.now() + DEVICE_CODE_TTL_MS).toString(),
     }
     const sig = signParams(params)
 
-    const publicUrl = getPublicUrl()
-    const callbackUrl = new URL(`${publicUrl}/oauth/callback/${deviceCode}`)
+    const callbackUrl = new URL(CALLBACK_PATH, getPublicUrl())
     for (const [k, v] of Object.entries(params)) {
       callbackUrl.searchParams.set(k, v)
     }
     callbackUrl.searchParams.set('sig', sig)
 
     const sevallaUrl = new URL('/authorize', SEVALLA_FRONTEND_URL)
-    sevallaUrl.searchParams.set('code', deviceCode)
-    sevallaUrl.searchParams.set('name', `Sevalla MCP (${describeClient(q.redirect_uri, client.name)})`)
     sevallaUrl.searchParams.set('callback', callbackUrl.toString())
 
-    return c.redirect(sevallaUrl.toString(), 302)
+    c.header('Cache-Control', 'no-store')
+    c.header('Referrer-Policy', 'no-referrer')
+    c.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
+    return c.html(signInPage({ userCode, redirectHost, continueUrl: sevallaUrl.toString() }))
   })
 
-  router.get('/oauth/callback/:deviceCode', async (c) => {
-    const deviceCode = c.req.param('deviceCode')
+  router.get(CALLBACK_PATH, async (c) => {
     const q = c.req.query()
 
     if (!q.sig || !q.redirect_uri || !q.code_challenge || !q.client_id || !q.state || !q.expires_at || !q.device_code) {
@@ -421,16 +409,24 @@ export const createOAuthRouter = () => {
       return c.json({ error: 'invalid_signature' }, 403)
     }
 
-    if (q.device_code !== deviceCode) {
-      return c.json({ error: 'invalid_request' }, 400)
-    }
-
     if (Number(q.expires_at) <= Date.now()) {
       return c.json({ error: 'expired' }, 400)
     }
 
-    const statusRes = await fetch(`${getApiBaseUrl()}/v3/auth/device-codes/${encodeURIComponent(deviceCode)}`, {
-      headers: trustedClientHeaders(c),
+    let deviceCode: string
+    try {
+      deviceCode = decrypt(q.device_code, DEVICE_CODE_KEY)
+    } catch {
+      return c.json({ error: 'invalid_request' }, 400)
+    }
+
+    const statusRes = await fetch(`${getApiBaseUrl()}/v3/auth/device-codes/token`, {
+      method: 'POST',
+      headers: { ...trustedClientHeaders(c), 'content-type': 'application/json' },
+      body: JSON.stringify({
+        device_code: deviceCode,
+        ...(q.approval_secret ? { approval_secret: q.approval_secret } : {}),
+      }),
     })
     if (!statusRes.ok) {
       return c.json({ error: 'device_code_poll_failed' }, 502)

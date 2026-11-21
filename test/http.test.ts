@@ -33,6 +33,14 @@ afterEach(() => {
   setClientMetadataFetcher()
 })
 
+const signInPage = async (res: Response) => {
+  strictEqual(res.status, 200)
+  const page = await res.text()
+  const href = /href="(https:\/\/app\.sevalla\.com[^"]+)"/.exec(page)?.[1] ?? ''
+  const consent = new URL(href.replaceAll('&amp;', '&'))
+  return { page, consent, callback: new URL(consent.searchParams.get('callback') ?? '') }
+}
+
 const mcpRequest = async (token: string | null, body: unknown, path = '/mcp') => {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
@@ -133,13 +141,24 @@ describe('HTTP: OAuth sign-in flow', () => {
   it('signs in end to end and the issued token works on /mcp', async () => {
     const { verifier, challenge } = pkce()
     const clientId = (await (await register()).json()).client_id
-    const consent = new URL((await authorize(clientId, challenge)).headers.get('location') ?? '')
-    strictEqual(consent.searchParams.get('name'), 'Sevalla MCP (localhost)')
-    const callback = new URL(consent.searchParams.get('callback') ?? '')
+    const { page, consent, callback } = await signInPage(await authorize(clientId, challenge))
+    ok(page.includes('DEVICE12'))
+    ok(page.includes('<strong>localhost</strong>'))
+    strictEqual(`${consent.origin}${consent.pathname}`, 'https://app.sevalla.com/authorize')
+    deepStrictEqual([...consent.searchParams.keys()], ['callback'])
+    strictEqual(`${callback.origin}${callback.pathname}`, 'https://mcp.sevalla.com/oauth/callback/device')
+    ok(!callback.href.includes('DEVICE12'))
+    ok(!callback.href.includes('secret-device-code'))
+    callback.searchParams.set('approval_secret', 'one-time-secret')
     const back = new URL(
       (await app.request(`${callback.pathname}${callback.search}`, { redirect: 'manual' })).headers.get('location') ??
         '',
     )
+    deepStrictEqual(api.forOperation('exchangeDeviceCodeV3')[0]?.body, {
+      device_code: 'secret-device-code',
+      approval_secret: 'one-time-secret',
+    })
+    strictEqual(api.forOperation('pollDeviceCodeV3').length, 0)
     strictEqual(back.searchParams.get('state'), 'state-1')
     strictEqual(back.searchParams.get('iss'), 'https://mcp.sevalla.com')
     const token = await app.request('/oauth/token', {
@@ -194,7 +213,7 @@ describe('HTTP: OAuth sign-in flow', () => {
         state: 's',
         resource,
       })
-      strictEqual((await app.request(`/oauth/authorize?${qs}`, { redirect: 'manual' })).status, 302, resource)
+      strictEqual((await app.request(`/oauth/authorize?${qs}`, { redirect: 'manual' })).status, 200, resource)
     }
   })
 
@@ -210,19 +229,18 @@ describe('HTTP: OAuth sign-in flow', () => {
     process.env.DEVICE_CODE_TRUSTED_CLIENT_TOKEN = 'service-secret'
     const { challenge } = pkce()
     const clientId = (await (await register()).json()).client_id
-    const consent = new URL(
-      (await authorize(clientId, challenge, { 'x-forwarded-for': '203.0.113.7' })).headers.get('location') ?? '',
-    )
+    const { callback } = await signInPage(await authorize(clientId, challenge, { 'x-forwarded-for': '203.0.113.7' }))
     const create = api.forOperation('createDeviceCodeV3')[0]
     strictEqual(create?.headers['x-sevalla-service-token'], 'service-secret')
     strictEqual(create?.headers['x-sevalla-client-ip'], '203.0.113.7')
     strictEqual(create?.headers['x-sevalla-redirect-host'], new URL(redirectUri).hostname)
-    const callback = new URL(consent.searchParams.get('callback') ?? '')
     await app.request(`${callback.pathname}${callback.search}`, {
       redirect: 'manual',
       headers: { 'x-forwarded-for': '203.0.113.7' },
     })
-    strictEqual(api.forOperation('pollDeviceCodeV3')[0]?.headers['x-sevalla-client-ip'], '203.0.113.7')
+    const exchange = api.forOperation('exchangeDeviceCodeV3')[0]
+    strictEqual(exchange?.headers['x-sevalla-service-token'], 'service-secret')
+    strictEqual(exchange?.headers['x-sevalla-client-ip'], '203.0.113.7')
   })
 
   it('ignores client-supplied X-Forwarded-For entries left of the trusted proxies', async () => {
@@ -292,12 +310,63 @@ describe('HTTP: OAuth sign-in flow', () => {
     strictEqual((await res.json()).error, 'device_code_request_failed')
   })
 
-  it('redirects with access_denied when the user declines', async () => {
-    api.override('pollDeviceCodeV3', () => ({ body: { status: 'denied' } }))
+  it('sends no approval secret when the callback has none, so the API keeps a replayed callback pending', async () => {
+    api.override('exchangeDeviceCodeV3', () => ({ body: { status: 'pending' } }))
     const { challenge } = pkce()
     const clientId = (await (await register()).json()).client_id
-    const consent = new URL((await authorize(clientId, challenge)).headers.get('location') ?? '')
-    const callback = new URL(consent.searchParams.get('callback') ?? '')
+    const { callback } = await signInPage(await authorize(clientId, challenge))
+    const back = new URL(
+      (await app.request(`${callback.pathname}${callback.search}`, { redirect: 'manual' })).headers.get('location') ??
+        '',
+    )
+    deepStrictEqual(api.forOperation('exchangeDeviceCodeV3')[0]?.body, { device_code: 'secret-device-code' })
+    strictEqual(back.searchParams.get('error'), 'access_denied')
+    strictEqual(back.searchParams.get('code'), null)
+  })
+
+  it('rejects a callback whose device code is not one this server encrypted', async () => {
+    const params = {
+      redirect_uri: redirectUri,
+      code_challenge: 'c',
+      client_id: 'id',
+      state: 's',
+      device_code: 'DEVICE12',
+      expires_at: (Date.now() + 300_000).toString(),
+    }
+    const res = await app.request(
+      `/oauth/callback/device?${new URLSearchParams({ ...params, sig: signParams(params) })}`,
+    )
+    strictEqual(res.status, 400)
+    strictEqual(api.forOperation('exchangeDeviceCodeV3').length, 0)
+  })
+
+  it('escapes the code from the API on the sign-in page', async () => {
+    api.override('createDeviceCodeV3', () => ({
+      status: 201,
+      body: { user_code: '<script>x</script>', device_code: 'secret-device-code' },
+    }))
+    const { challenge } = pkce()
+    const clientId = (await (await register()).json()).client_id
+    const res = await authorize(clientId, challenge)
+    const page = await res.text()
+    ok(!page.includes('<script>'))
+    ok(page.includes('&lt;script&gt;'))
+    ok(res.headers.get('content-security-policy')?.includes("frame-ancestors 'none'"))
+    strictEqual(res.headers.get('cache-control'), 'no-store')
+  })
+
+  it('returns 502 when the API answers without a device code', async () => {
+    api.override('createDeviceCodeV3', () => ({ status: 201, body: { code: 'DEVICE12' } }))
+    const { challenge } = pkce()
+    const clientId = (await (await register()).json()).client_id
+    strictEqual((await authorize(clientId, challenge)).status, 502)
+  })
+
+  it('redirects with access_denied when the user declines', async () => {
+    api.override('exchangeDeviceCodeV3', () => ({ body: { status: 'denied' } }))
+    const { challenge } = pkce()
+    const clientId = (await (await register()).json()).client_id
+    const { callback } = await signInPage(await authorize(clientId, challenge))
     const back = new URL(
       (await app.request(`${callback.pathname}${callback.search}`, { redirect: 'manual' })).headers.get('location') ??
         '',
@@ -314,7 +383,9 @@ describe('HTTP: OAuth sign-in flow', () => {
       device_code: 'OLD',
       expires_at: '1000',
     }
-    const res = await app.request(`/oauth/callback/OLD?${new URLSearchParams({ ...params, sig: signParams(params) })}`)
+    const res = await app.request(
+      `/oauth/callback/device?${new URLSearchParams({ ...params, sig: signParams(params) })}`,
+    )
     strictEqual(res.status, 400)
     strictEqual((await res.json()).error, 'expired')
   })
@@ -363,12 +434,9 @@ describe('HTTP: OAuth sign-in with client ID metadata documents', () => {
   it('signs a client in from its metadata document and names it on the consent screen', async () => {
     const fetched = serveDocuments({ [CLAUDE_ID]: claudeDocument })
     const { verifier, challenge } = pkce()
-    const res = await authorize(CLAUDE_ID, CLAUDE_REDIRECT, challenge)
-    strictEqual(res.status, 302)
+    const { page, callback } = await signInPage(await authorize(CLAUDE_ID, CLAUDE_REDIRECT, challenge))
     deepStrictEqual(fetched, [CLAUDE_ID])
-    const consent = new URL(res.headers.get('location') ?? '')
-    strictEqual(consent.searchParams.get('name'), 'Sevalla MCP (claude.ai - Claude)')
-    const callback = new URL(consent.searchParams.get('callback') ?? '')
+    ok(page.includes('<strong>claude.ai</strong>'))
     const back = new URL(
       (await app.request(`${callback.pathname}${callback.search}`, { redirect: 'manual' })).headers.get('location') ??
         '',
@@ -450,20 +518,6 @@ describe('HTTP: OAuth sign-in with client ID metadata documents', () => {
     const limited = await attempt(30)
     strictEqual(limited.status, 429)
     strictEqual((await limited.json()).error, 'temporarily_unavailable')
-  })
-
-  it('keeps hostile client names short and printable on the consent screen', async () => {
-    const id = 'https://client.example/meta.json'
-    serveDocuments({
-      [id]: {
-        client_id: id,
-        client_name: 'Totally\u0000 Legit\u202e   Client With An Extremely Long Name That Keeps Going',
-        redirect_uris: ['https://client.example/callback'],
-      },
-    })
-    const res = await authorize(id, 'https://client.example/callback', pkce().challenge)
-    const name = new URL(res.headers.get('location') ?? '').searchParams.get('name') ?? ''
-    strictEqual(name, 'Sevalla MCP (client.example - Totally Legit Client With An Extremely L)')
   })
 })
 
