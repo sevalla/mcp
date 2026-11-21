@@ -30,8 +30,8 @@ const UUID = '12345678-1234-4123-8123-123456789abc'
 
 describe('operation snapshot', () => {
   it('contains every operation of the v3 API exactly once', () => {
-    strictEqual(OPERATIONS.length, 250)
-    strictEqual(new Set(OPERATIONS.map((o) => o.id)).size, 250)
+    strictEqual(OPERATIONS.length, 249)
+    strictEqual(new Set(OPERATIONS.map((o) => o.id)).size, 249)
     for (const o of OPERATIONS) {
       ok(o.path.startsWith('/'), o.id)
       ok(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(o.method), o.id)
@@ -167,7 +167,7 @@ describe('availability', () => {
     const unavailable = OPERATIONS.filter((o) => unavailableReason(o))
       .map((o) => o.id)
       .sort()
-    deepStrictEqual(unavailable, ['createDeviceCodeV3', 'openTerminalV3', 'pollDeviceCodeV3'])
+    deepStrictEqual(unavailable, ['createDeviceCodeV3', 'openTerminalV3'])
   })
 
   it('allows deletes, API key management and secret issuance', () => {
