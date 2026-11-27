@@ -27,9 +27,9 @@
     "fmt:check": "oxfmt --check"
   },
   "dependencies": {
-    "@hono/node-server": "^2.1.5",
+    "@hono/node-server": "^2.1.6",
     "@modelcontextprotocol/server": "^2.3.1",
-    "hono": "^4.13.13",
+    "hono": "^4.13.16",
     "zod": "^4.6.7"
   },
   "devDependencies": {
