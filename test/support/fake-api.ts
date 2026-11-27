@@ -54,28 +54,11 @@ type Handler = (_ctx: HandlerContext) => { status?: number; body: unknown }
 const now = Date.now()
 const iso = (offsetMs: number) => new Date(now + offsetMs).toISOString()
 
-const SIGN_IN_OPERATIONS: Operation[] = [
-  {
-    id: 'exchangeDeviceCodeV3',
-    method: 'POST',
-    path: '/auth/device-codes/token',
-    tag: 'Device Authorization',
-    summary: 'Exchange a device code for an API key',
-    description: '',
-    params: [],
-    body: null,
-    bodyRequired: true,
-    class: 'update',
-  },
-]
-
-const routes = [...OPERATIONS, ...SIGN_IN_OPERATIONS]
-  .map((op) => ({
-    op,
-    pattern: new RegExp(`^/v3${op.path.replace(/\{[^}]+\}/g, '([^/]+)')}$`),
-    names: [...op.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1] as string),
-  }))
-  .sort((a, b) => a.names.length - b.names.length || b.op.path.length - a.op.path.length)
+const routes = OPERATIONS.map((op) => ({
+  op,
+  pattern: new RegExp(`^/v3${op.path.replace(/\{[^}]+\}/g, '([^/]+)')}$`),
+  names: [...op.path.matchAll(/\{([^}]+)\}/g)].map((m) => m[1] as string),
+})).sort((a, b) => a.names.length - b.names.length || b.op.path.length - a.op.path.length)
 
 const page = (data: unknown[], query: Record<string, string>) => ({
   data: data.slice(Number(query.offset ?? 0), Number(query.offset ?? 0) + Number(query.limit ?? 25)),

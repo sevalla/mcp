@@ -45,7 +45,7 @@
       "path": "/api-keys",
       "tag": "API Keys",
       "summary": "Create API key",
-      "description": "Create a new API key with the specified roles and/or capabilities. The response includes the raw token value, which is only shown once - make sure to store it securely. At least one role or capability must be provided.",
+      "description": "Create a new API key with the specified roles and/or capabilities. The response includes the raw token value, which is only shown once - make sure to store it securely. At least one role or capability must be provided. A key can only get permissions that the calling API key has itself: a permission scoped to one resource needs the same permission on that resource or company-wide, and every resour…",
       "params": [],
       "body": {
         "type": "object",
@@ -58,7 +58,7 @@
           },
           "role_ids": {
             "type": "array",
-            "description": "List of role IDs to assign to the API key. At least one role or capability is required",
+            "description": "List of role IDs to assign to the API key. At least one role or capability is required. The calling API key must have every permission of each role",
             "items": {
               "type": "string",
               "format": "uuid"
@@ -66,7 +66,7 @@
           },
           "capabilities": {
             "type": "array",
-            "description": "List of granular capabilities to assign. At least one role or capability is required",
+            "description": "List of granular capabilities to assign. At least one role or capability is required. The calling API key must have each of them",
             "items": {
               "type": "object",
               "properties": {
@@ -146,7 +146,7 @@
       "path": "/api-keys/{id}",
       "tag": "API Keys",
       "summary": "Update API key",
-      "description": "Update an API key's name, roles, or capabilities. When roles or capabilities are provided, they fully replace the existing values. An API key cannot update itself. The API key that AI support manages cannot be changed through the API, so the request returns 403 for it. Use the AI support settings page in the dashboard instead.",
+      "description": "Update an API key's name, roles, or capabilities. When roles or capabilities are provided, they fully replace the existing values. An API key cannot update itself. The calling API key must have every permission the key has now and every permission it would get, so it cannot change a key with more access than its own. A permission scoped to one resource needs the same permission on that resource o…",
       "params": [
         {
           "name": "id",
@@ -231,7 +231,7 @@
       "path": "/api-keys/{id}/rotate",
       "tag": "API Keys",
       "summary": "Rotate API key",
-      "description": "Generate a new token for an API key. The old token can optionally remain valid for a transition period (up to 168 hours) to allow graceful migration. The response includes the new raw token, which is only shown once. An API key cannot rotate itself. The API key that AI support manages cannot be changed through the API, so the request returns 403 for it. Use the AI support settings page in the das…",
+      "description": "Generate a new token for an API key. The old token can optionally remain valid for a transition period (up to 168 hours) to allow graceful migration. The response includes the new raw token, which is only shown once. An API key cannot rotate itself, and it cannot rotate a key that has permissions it does not have itself (403). Rotation keeps the roles and capabilities of the key. The API key that…",
       "params": [
         {
           "name": "id",
@@ -266,7 +266,7 @@
       "path": "/api-keys/{id}/toggle",
       "tag": "API Keys",
       "summary": "Toggle API key",
-      "description": "Enable or disable an API key. A disabled API key cannot be used for authentication until it is re-enabled. An API key cannot toggle itself. The API key that AI support manages cannot be changed through the API, so the request returns 403 for it. Use the AI support settings page in the dashboard instead.",
+      "description": "Enable or disable an API key. A disabled API key cannot be used for authentication until it is re-enabled. An API key cannot toggle itself, and it cannot enable a key that has permissions it does not have itself (403). Disabling such a key is allowed. The API key that AI support manages cannot be changed through the API, so the request returns 403 for it. Use the AI support settings page in the d…",
       "params": [
         {
           "name": "id",
@@ -420,7 +420,8 @@
           },
           "docker_image": {
             "type": "string",
-            "description": "Docker image reference including tag or digest. Required when source is `dockerImage`.",
+            "description": "Docker image reference including tag or digest, such as `nginx:1.27` or `ghcr.io/acme/api:v1`. Must be a valid image reference: no spaces, quotes or uppercase letters in the repository name. Required…",
+            "maxLength": 512,
             "nullable": true
           },
           "docker_registry_credential_id": {
@@ -648,7 +649,7 @@
           },
           "default_branch": {
             "type": "string",
-            "description": "Git branch used for automatic and manual deployments when no branch is explicitly specified. Ignored when the same request switches the source to dockerImage or app.",
+            "description": "Git branch used for automatic and manual deployments when no branch is explicitly specified. Ignored when the same request switches the source to dockerImage or app. When the request sends `source` a…",
             "minLength": 1
           },
           "hibernation_enabled": {
@@ -698,7 +699,7 @@
           },
           "nixpacks_version": {
             "type": "string",
-            "description": "Pinned Nixpacks version. When not set, switching to `nixpacks` pins `1.41` and an app already on `nixpacks` keeps its current version. Only applies to the deprecated `nixpacks` build type.",
+            "description": "Pinned Nixpacks version. When not set, the application keeps its current version. Only applies to applications that still use the retired `nixpacks` build type.",
             "enum": ["1.29", "1.39", "1.41"]
           },
           "buildpacks": {
@@ -752,7 +753,8 @@
           },
           "docker_image": {
             "type": "string",
-            "description": "Docker image reference including tag or digest. Required when source is `dockerImage`."
+            "description": "Docker image reference including tag or digest, such as `nginx:1.27` or `ghcr.io/acme/api:v1`. Must be a valid image reference: no spaces, quotes or uppercase letters in the repository name. Required…",
+            "maxLength": 512
           }
         }
       },
@@ -924,7 +926,7 @@
       "path": "/applications/{id}/clone",
       "tag": "Applications",
       "summary": "Clone application",
-      "description": "Create an identical copy of an existing application including its processes, environment variables, build settings, and configuration. The cloned application is created in a new namespace and is not added to the pipeline stage of the source application. No deployment is started - start one with the Trigger Deployment endpoint. The clone copies `auto_deploy` from the source, so if it is on, the ne…",
+      "description": "Create an identical copy of an existing application including its processes, environment variables, build settings, and configuration. A clone of an application that uses the retired `nixpacks` build type is created with `ingot` instead. The cloned application is created in a new namespace and is not added to the pipeline stage of the source application. No deployment is started - start one with …",
       "params": [
         {
           "name": "id",
@@ -1108,7 +1110,7 @@
       "path": "/applications/{id}/deployments",
       "tag": "Applications",
       "summary": "Trigger deployment",
-      "description": "Trigger a new deployment for an application. By default, deploys the latest commit on the default branch. You can optionally specify a different branch, a specific commit, a Docker image, or restart from the last successful deployment. You can also rebuild without the build cache. The deployment runs asynchronously - use the get deployment endpoint to track its progress.",
+      "description": "Trigger a new deployment for an application. By default, deploys the latest commit on the default branch. You can optionally specify a different branch, a specific commit, a Docker image, or restart from the last successful deployment. You can also rebuild without the build cache. The deployment runs asynchronously - use the get deployment endpoint to track its progress. Can return 400 with the r…",
       "params": [
         {
           "name": "id",
@@ -1135,7 +1137,8 @@
           },
           "docker_image": {
             "type": "string",
-            "description": "Docker image reference to deploy (e.g., `nginx:latest`). Only applies to applications with `dockerImage` source."
+            "description": "Docker image reference to deploy, such as `nginx:latest`. Must be a valid image reference: no spaces, quotes or uppercase letters in the repository name. Only applies to applications with `dockerImag…",
+            "maxLength": 512
           },
           "is_restart": {
             "type": "boolean",
@@ -3115,12 +3118,12 @@
           },
           "schedule": {
             "type": "string",
-            "description": "Cron expression defining the execution schedule. Required for cron processes.",
+            "description": "Standard five-field cron expression for cron processes, such as `0 */6 * * *`. Macros like `@daily` and a seconds field are not supported. If omitted, the process runs hourly (`@hourly`).",
             "maxLength": 100
           },
           "time_zone": {
             "type": "string",
-            "description": "IANA time zone for the cron schedule. Only applicable to cron processes.",
+            "description": "IANA time zone name for the cron schedule, such as `America/New_York` or `UTC`. Unknown time zones are rejected. If omitted, the cluster's default time zone is used. Only applicable to cron processes.",
             "maxLength": 100
           },
           "concurrency_policy": {
@@ -3529,12 +3532,12 @@
           },
           "schedule": {
             "type": "string",
-            "description": "Cron expression defining the execution schedule. Only applicable to cron processes.",
+            "description": "Standard five-field cron expression, such as `0 */6 * * *`. Macros like `@daily` and a seconds field are not supported. Send an empty string to clear it, after which the process runs hourly (`@hourly…",
             "maxLength": 100
           },
           "time_zone": {
             "type": "string",
-            "description": "IANA time zone for the cron schedule. Only applicable to cron processes.",
+            "description": "IANA time zone name for the cron schedule, such as `America/New_York` or `UTC`. Unknown time zones are rejected. Send an empty string to clear it, after which the cluster default time zone is used. O…",
             "maxLength": 100
           },
           "concurrency_policy": {
@@ -4555,13 +4558,13 @@
       "path": "/applications/{id}/repository/search",
       "tag": "Applications",
       "summary": "Search application repository code",
-      "description": "Search the application Git repository for code matching a query, useful for locating where something is defined or used. Search runs against the provider index, which covers the default branch, so it does not accept a ref. Result quality varies by provider: it is strongest on GitHub and more limited on GitLab and Bitbucket. Only applications with a `privateGit` or `publicGit` source have a reposi…",
+      "description": "Search the application Git repository for code matching a query, useful for locating where something is defined or used. Search runs against the provider index, which covers the default branch, so it does not accept a ref. Result quality varies by provider: it is strongest on GitHub and more limited on GitLab and Bitbucket. Providers only search code with a token, so `publicGit` applications retu…",
       "params": [
         {
           "name": "query",
           "in": "query",
           "required": true,
-          "description": "Code search query. Searches file contents in the repository.",
+          "description": "Text to search for in the repository file contents. On GitHub and Bitbucket it is matched as one exact phrase, and search qualifiers such as `repo:` or `path:` are treated as plain text.",
           "schema": {
             "type": "string",
             "minLength": 1
@@ -4589,7 +4592,7 @@
       "path": "/applications/{id}/repository/tree",
       "tag": "Applications",
       "summary": "List application repository tree",
-      "description": "List files and directories in the application Git repository at a given ref. Use this to discover the repository structure before reading individual files. Defaults to reading the commit of the latest successful deployment so you see exactly the code that is running. Only applications with a `privateGit` or `publicGit` source have a repository; `dockerImage` and internally created apps return 422.",
+      "description": "List files and directories in the application Git repository at a given ref. Use this to discover the repository structure before reading individual files. Defaults to reading the commit of the latest successful deployment so you see exactly the code that is running. Only applications with a `privateGit` or `publicGit` source have a repository; `dockerImage` and internally created apps return 422…",
       "params": [
         {
           "name": "ref",
@@ -4874,10 +4877,44 @@
       "path": "/auth/device-codes",
       "tag": "Device Authorization",
       "summary": "Create device code",
-      "description": "Request a new device authorization code. The external client displays this code to the user, who then visits the Sevalla dashboard to approve the device. The client polls the GET endpoint until the code is approved, denied, or expired. Codes expire after 5 minutes. Maximum 5 active codes per IP address. Send the optional `x-sevalla-client` header to name the client that requests access, for examp…",
+      "description": "Start a device sign-in. The client shows `user_code` to the user, who enters it on the Sevalla dashboard authorize page and picks the company and permissions for a new API key. The client keeps `device_code` to itself and polls `POST /auth/device-codes/token` with it until the request is approved, denied or expired. Codes expire after 5 minutes and work once. Maximum 5 active codes per IP address…",
       "params": [],
-      "body": null,
+      "body": {
+        "type": "object",
+        "properties": {
+          "callback_url": {
+            "type": "string",
+            "description": "Optional loopback URL where the dashboard sends the browser after the user approves or denies, for a CLI that listens on this computer. It must be `http://127.0.0.1:<port>/callback/<nonce>` or `http:…"
+          }
+        }
+      },
       "bodyRequired": false
+    },
+    {
+      "id": "exchangeDeviceCodeV3",
+      "method": "POST",
+      "path": "/auth/device-codes/token",
+      "tag": "Device Authorization",
+      "summary": "Exchange a device code for an API key",
+      "description": "Check a device sign-in with the `device_code` from the create endpoint. Poll every 5 seconds (at most 30 requests per minute for each device code and 60 per minute for each IP address) until the status is no longer `pending`. Sign-ins started by the Sevalla MCP server, and device codes created with a `callback_url`, also need the `approval_secret` the dashboard adds to the callback URL, so only t…",
+      "params": [],
+      "body": {
+        "type": "object",
+        "properties": {
+          "device_code": {
+            "type": "string",
+            "description": "The `device_code` returned when the device code was created",
+            "minLength": 1
+          },
+          "approval_secret": {
+            "type": "string",
+            "description": "The one-time secret the dashboard adds to the callback URL after the user approves. Required for sign-ins started by the Sevalla MCP server and for device codes created with a `callback_url`: without…",
+            "minLength": 1
+          }
+        },
+        "required": ["device_code"]
+      },
+      "bodyRequired": true
     },
     {
       "id": "listDatabasesV3",
@@ -5564,10 +5601,9 @@
             "description": "Optional ID of a different database to restore the backup into. When provided, the backup is cloned to this target database instead of overwriting the source. The target must be in the same cluster, …",
             "format": "uuid"
           }
-        },
-        "nullable": true
+        }
       },
-      "bodyRequired": true,
+      "bodyRequired": false,
       "permissions": ["DATABASE:UPDATE"]
     },
     {
@@ -5747,10 +5783,9 @@
             "description": "Optional ID of a different database to restore the backup into. When provided, the backup is restored into this database instead of the source. The target must be in the same cluster and of the same …",
             "format": "uuid"
           }
-        },
-        "nullable": true
+        }
       },
-      "bodyRequired": true,
+      "bodyRequired": false,
       "permissions": ["DATABASE:UPDATE"]
     },
     {
@@ -6606,7 +6641,7 @@
       "path": "/git/providers",
       "tag": "Git",
       "summary": "List Git providers",
-      "description": "Retrieve available Git providers (GitHub, Bitbucket, GitLab) with their OAuth connect URLs. Use the connect_url to initiate the OAuth flow and link a Git account. GitHub also includes a settings_url for managing repository access permissions.",
+      "description": "Retrieve available Git providers (GitHub, Bitbucket, GitLab) with the URL to open in a browser to connect each one. GitHub also includes a settings_url for managing repository access permissions.",
       "params": [],
       "body": null,
       "bodyRequired": false
@@ -8191,7 +8226,7 @@
                     },
                     "schedule": {
                       "type": "string",
-                      "description": "Cron expression defining the execution schedule. Required for cron processes.",
+                      "description": "Standard five-field cron expression for cron processes, such as `0 */6 * * *`. Macros like `@daily` and a seconds field are not supported. If omitted, the process runs hourly (`@hourly`).",
                       "maxLength": 100
                     },
                     "job_start_policy": {
@@ -8695,7 +8730,7 @@
                     },
                     "schedule": {
                       "type": "string",
-                      "description": "Cron expression defining the execution schedule. Required for cron processes.",
+                      "description": "Standard five-field cron expression for cron processes, such as `0 */6 * * *`. Macros like `@daily` and a seconds field are not supported. If omitted, the process runs hourly (`@hourly`).",
                       "maxLength": 100
                     },
                     "job_start_policy": {
@@ -8990,7 +9025,7 @@
       "path": "/pipelines/{id}/promote",
       "tag": "Pipelines",
       "summary": "Promote pipeline",
-      "description": "Promote an application from one pipeline stage to another by copying the latest successful deployment from the source app to one or more target apps. The target apps receive a new deployment that reuses the source build image without rebuilding.",
+      "description": "Promote an application from one pipeline stage to another by copying the latest successful deployment from the source app to one or more target apps. The source and target apps must all be in this pipeline. The target apps receive a new deployment that reuses the source build image without rebuilding.",
       "params": [
         {
           "name": "id",
@@ -9009,12 +9044,12 @@
         "properties": {
           "source_app_id": {
             "type": "string",
-            "description": "Identifier of the application to promote from. The latest successful deployment of this app will be used.",
+            "description": "Identifier of the application to promote from. It must be in a stage of this pipeline. The latest successful deployment of this app will be used.",
             "format": "uuid"
           },
           "target_app_ids": {
             "type": "array",
-            "description": "Identifiers of the applications to promote to. Each target app will receive a new deployment using the source app build.",
+            "description": "Identifiers of the applications to promote to. Each must be in a stage of this pipeline and cannot be the source app. Each target app will receive a new deployment using the source app build.",
             "minItems": 1,
             "items": {
               "type": "string",
@@ -11394,7 +11429,7 @@
           "name": "query",
           "in": "query",
           "required": true,
-          "description": "Code search query. Searches file contents in the repository.",
+          "description": "Text to search for in the repository file contents. On GitHub and Bitbucket it is matched as one exact phrase, and search qualifiers such as `repo:` or `path:` are treated as plain text.",
           "schema": {
             "type": "string",
             "minLength": 1
@@ -11422,7 +11457,7 @@
       "path": "/static-sites/{id}/repository/tree",
       "tag": "Static sites",
       "summary": "List static site repository tree",
-      "description": "List files and directories in the static site Git repository at a given ref. Use this to discover the repository structure before reading individual files. Defaults to reading the commit of the latest successful deployment so you see exactly the code that is deployed. Static sites always have a `privateGit` or `publicGit` source; the 422 response only occurs if the repository URL is missing.",
+      "description": "List files and directories in the static site Git repository at a given ref. Use this to discover the repository structure before reading individual files. Defaults to reading the commit of the latest successful deployment so you see exactly the code that is deployed. Static sites always have a `privateGit` or `publicGit` source; the 422 response occurs if the repository URL is missing, or, with …",
       "params": [
         {
           "name": "ref",
@@ -11676,6 +11711,199 @@
       "body": null,
       "bodyRequired": false,
       "permissions": ["BILLING:UPDATE"]
+    },
+    {
+      "id": "listUsagePeriodsV3",
+      "method": "GET",
+      "path": "/usage/periods",
+      "tag": "Usage",
+      "summary": "List usage periods",
+      "description": "List the company's billing periods, newest first, each with its usage and cost per usage type. The first item is the current billing period. It is still open, so its amounts can change until it closes. The amounts of a billing period are calculated the way its invoice is: each usage type is priced on the usage of the whole period, at the current prices, and rounded once. They are an estimate of t…",
+      "params": [
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "description": "Maximum number of billing periods to return, counted back from the current one",
+          "schema": {
+            "type": "integer",
+            "default": 12,
+            "minimum": 1,
+            "maximum": 24
+          }
+        },
+        {
+          "name": "project_id",
+          "in": "query",
+          "required": false,
+          "description": "Count only the usage of the services that are in this project now. Usage of a service that was deleted or moved out of the project is not counted, and a project without services gives zero usage. Ret…",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "service_ids",
+          "in": "query",
+          "required": false,
+          "description": "Comma-separated identifiers of the services to count: applications, databases, static sites, object storage buckets and load balancers. Up to 100 identifiers. Together with `project_id`, only the lis…",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "types",
+          "in": "query",
+          "required": false,
+          "description": "Comma-separated usage types to count. By default every type is counted. `appCompute` - running time of application processes. `appStorage` - persistent disks of applications. `appBuild` - build time …",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "body": null,
+      "bodyRequired": false,
+      "permissions": ["BILLING:READ"]
+    },
+    {
+      "id": "getUsageRangeV3",
+      "method": "GET",
+      "path": "/usage/range",
+      "tag": "Usage",
+      "summary": "Get usage for a date range",
+      "description": "Get the usage and cost of a free range of whole UTC days, counted by the day the usage happened, with totals per usage type and, on request, per day and per service. Use it for a calendar month or any other range that does not follow the billing periods. Each piece of usage is priced with the effective price of the billing period it was billed in, at the current prices. The amounts are an estimat…",
+      "params": [
+        {
+          "name": "start_date",
+          "in": "query",
+          "required": true,
+          "description": "First UTC day of the range, as YYYY-MM-DD",
+          "schema": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        {
+          "name": "end_date",
+          "in": "query",
+          "required": true,
+          "description": "Last UTC day of the range, as YYYY-MM-DD. The day itself is included. It cannot be before `start_date` and the range can cover at most 366 days.",
+          "schema": {
+            "type": "string",
+            "format": "date"
+          }
+        },
+        {
+          "name": "project_id",
+          "in": "query",
+          "required": false,
+          "description": "Count only the usage of the services that are in this project now. Usage of a service that was deleted or moved out of the project is not counted, and a project without services gives zero usage. Ret…",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "service_ids",
+          "in": "query",
+          "required": false,
+          "description": "Comma-separated identifiers of the services to count: applications, databases, static sites, object storage buckets and load balancers. Up to 100 identifiers. Together with `project_id`, only the lis…",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "types",
+          "in": "query",
+          "required": false,
+          "description": "Comma-separated usage types to count. By default every type is counted. `appCompute` - running time of application processes. `appStorage` - persistent disks of applications. `appBuild` - build time …",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "include",
+          "in": "query",
+          "required": false,
+          "description": "Comma-separated optional parts to add to the response. `days` - usage per UTC day. `services` - usage per service, which can be long for a company with many services. By default neither is returned.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "body": null,
+      "bodyRequired": false,
+      "permissions": ["BILLING:READ"]
+    },
+    {
+      "id": "getUsageSummaryV3",
+      "method": "GET",
+      "path": "/usage/summary",
+      "tag": "Usage",
+      "summary": "Get usage summary",
+      "description": "Get the usage and cost of one billing window, with totals per usage type and, on request, per day and per service. Without `period_start` and `period_end` it covers the current billing period. For an earlier period, copy both values from an item of the usage periods endpoint. The amounts of a billing period are calculated the way its invoice is, at the current prices, so they are an estimate of t…",
+      "params": [
+        {
+          "name": "period_start",
+          "in": "query",
+          "required": false,
+          "description": "Start of the window in ISO 8601 format, normally the `period_start` of an item of the usage periods endpoint. Send it together with `period_end`, or leave both out to get the current billing period.",
+          "schema": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        {
+          "name": "period_end",
+          "in": "query",
+          "required": false,
+          "description": "End of the window in ISO 8601 format, normally the `period_end` of an item of the usage periods endpoint. It cannot be before `period_start` and the window can cover at most 366 days.",
+          "schema": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        {
+          "name": "project_id",
+          "in": "query",
+          "required": false,
+          "description": "Count only the usage of the services that are in this project now. Usage of a service that was deleted or moved out of the project is not counted, and a project without services gives zero usage. Ret…",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "service_ids",
+          "in": "query",
+          "required": false,
+          "description": "Comma-separated identifiers of the services to count: applications, databases, static sites, object storage buckets and load balancers. Up to 100 identifiers. Together with `project_id`, only the lis…",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "types",
+          "in": "query",
+          "required": false,
+          "description": "Comma-separated usage types to count. By default every type is counted. `appCompute` - running time of application processes. `appStorage` - persistent disks of applications. `appBuild` - build time …",
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "include",
+          "in": "query",
+          "required": false,
+          "description": "Comma-separated optional parts to add to the response. `days` - usage per UTC day. `services` - usage per service, which can be long for a company with many services. By default neither is returned.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "body": null,
+      "bodyRequired": false,
+      "permissions": ["BILLING:READ"]
     },
     {
       "id": "listUsersV3",

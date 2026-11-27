@@ -284,6 +284,13 @@ const SYNONYMS: Record<string, string[]> = {
   job: ['process'],
   region: ['cluster'],
   location: ['cluster'],
+  spend: ['usage cost'],
+  spending: ['usage cost'],
+  spent: ['usage cost'],
+  cost: ['usage cost'],
+  bill: ['usage cost'],
+  billing: ['usage cost'],
+  invoice: ['usage cost'],
 }
 
 const bodyFields = (op: Operation) => Object.keys((op.body?.properties ?? {}) as Record<string, unknown>)
@@ -300,6 +307,11 @@ const SEARCH_INDEX = OPERATIONS.map((op) => ({
 const termScore = ({ primary, tagged, secondary }: (typeof SEARCH_INDEX)[number], term: string) =>
   (primary.has(term) ? 3 : tagged.has(term) ? 2 : 0) + (secondary.has(term) ? 1 : 0)
 
+const everyTermScore = (entry: (typeof SEARCH_INDEX)[number], terms: string[]) => {
+  const scores = terms.map((term) => termScore(entry, term))
+  return scores.includes(0) ? 0 : scores.reduce((sum, score) => sum + score, 0)
+}
+
 export interface SearchOptions {
   query?: string
   cls?: OperationClass
@@ -309,15 +321,18 @@ export interface SearchOptions {
 
 export const searchOperations = ({ query, cls, tag, limit = 5 }: SearchOptions): Operation[] => {
   const concepts = [...new Set(tokenize(query ?? '').map(stem))].map((term) => [
-    term,
-    ...(SYNONYMS[term] ?? []).map(stem),
+    [term],
+    ...(SYNONYMS[term] ?? []).map((synonym) => synonym.split(' ').map(stem)),
   ])
   return SEARCH_INDEX.filter(
     ({ op }) => (!cls || op.class === cls) && (!tag || op.tag.toLowerCase() === tag.toLowerCase()),
   )
     .map((entry) => ({
       op: entry.op,
-      score: concepts.reduce((sum, terms) => sum + Math.max(...terms.map((term) => termScore(entry, term))), 0),
+      score: concepts.reduce(
+        (sum, options) => sum + Math.max(...options.map((terms) => everyTermScore(entry, terms))),
+        0,
+      ),
       words: entry.primary.size,
     }))
     .filter(({ score }) => concepts.length === 0 || score > 0)

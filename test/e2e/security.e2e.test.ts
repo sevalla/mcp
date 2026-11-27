@@ -94,6 +94,7 @@ describe('e2e security: environment variable values and secret issuance', () => 
   it('refuses sign-in plumbing and the terminal WebSocket', async () => {
     const cases: [string, string, Record<string, string>][] = [
       ['sevalla_api_create', 'createDeviceCodeV3', {}],
+      ['sevalla_api_update', 'exchangeDeviceCodeV3', {}],
       ['sevalla_api_read', 'openTerminalV3', { id: IDS.app, process_id: IDS.process }],
     ]
     for (const [tool, operation_id, path_params] of cases) {
