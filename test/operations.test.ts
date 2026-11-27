@@ -30,8 +30,8 @@ const UUID = '12345678-1234-4123-8123-123456789abc'
 
 describe('operation snapshot', () => {
   it('contains every operation of the v3 API exactly once', () => {
-    strictEqual(OPERATIONS.length, 249)
-    strictEqual(new Set(OPERATIONS.map((o) => o.id)).size, 249)
+    strictEqual(OPERATIONS.length, 253)
+    strictEqual(new Set(OPERATIONS.map((o) => o.id)).size, 253)
     for (const o of OPERATIONS) {
       ok(o.path.startsWith('/'), o.id)
       ok(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(o.method), o.id)
@@ -110,6 +110,7 @@ describe('classification', () => {
       'createDatabaseExternalBackupV3',
       'createWebhookV3',
       'createApiKeyV3',
+      'exchangeDeviceCodeV3',
       'createUsageAlertConfigV3',
       'createApplicationTcpProxyV3',
       'createObjectStorageDomainV3',
@@ -152,7 +153,7 @@ describe('classification', () => {
     for (const o of OPERATIONS.filter((x) => isExecutable(x))) {
       counts[o.class] = (counts[o.class] ?? 0) + 1
     }
-    deepStrictEqual(counts, { read: 60, create: 13, update: 74, delete: 31 })
+    deepStrictEqual(counts, { read: 63, create: 13, update: 74, delete: 31 })
     strictEqual(OPERATIONS.filter((o) => o.dedicatedTool).length, 69)
   })
 
@@ -167,7 +168,24 @@ describe('availability', () => {
     const unavailable = OPERATIONS.filter((o) => unavailableReason(o))
       .map((o) => o.id)
       .sort()
-    deepStrictEqual(unavailable, ['createDeviceCodeV3', 'openTerminalV3'])
+    deepStrictEqual(unavailable, ['createDeviceCodeV3', 'exchangeDeviceCodeV3', 'openTerminalV3'])
+  })
+
+  it('refuses the device code exchange for the same reason as the device code request', () => {
+    strictEqual(isExecutable(op('exchangeDeviceCodeV3')), false)
+    ok(unavailableReason(op('exchangeDeviceCodeV3'))?.includes('sign-in flow'))
+    strictEqual(unavailableReason(op('exchangeDeviceCodeV3')), unavailableReason(op('createDeviceCodeV3')))
+  })
+
+  it('reads usage and cost through sevalla_api_read without withholding fields', () => {
+    for (const id of ['listUsagePeriodsV3', 'getUsageSummaryV3', 'getUsageRangeV3']) {
+      strictEqual(op(id).method, 'GET', id)
+      strictEqual(op(id).class, 'read', id)
+      strictEqual(op(id).dedicatedTool, undefined, id)
+      strictEqual(isExecutable(op(id)), true, id)
+      strictEqual(op(id).body, null, id)
+      strictEqual(secretFieldsFor(op(id)).size, 0, id)
+    }
   })
 
   it('allows deletes, API key management and secret issuance', () => {
@@ -224,6 +242,17 @@ describe('checkQuery', () => {
     throws(() => checkQuery(op('listProjectsV3'), { limit: { $gt: 1 } }), /must be a string, number or boolean/)
   })
 
+  it('requires both days of a usage range and accepts its filters', () => {
+    const range = { start_date: '2026-10-01', end_date: '2026-10-31' }
+    throws(() => checkQuery(op('getUsageRangeV3'), { start_date: range.start_date }), /query\.end_date is required/)
+    deepStrictEqual(checkQuery(op('getUsageRangeV3'), { ...range, types: 'db', include: 'services' }), {
+      ...range,
+      types: 'db',
+      include: 'services',
+    })
+    deepStrictEqual(checkQuery(op('getUsageSummaryV3'), {}), {})
+  })
+
   it('enforces required query parameters', () => {
     const required = OPERATIONS.find((o) => o.params.some((p) => p.in === 'query' && p.required) && !o.dedicatedTool)
     if (required) {
@@ -256,6 +285,39 @@ describe('searchOperations', () => {
     strictEqual(top('restart database'), 'restartDatabaseV3')
     strictEqual(top('add worker to app'), 'createProcessV3')
     strictEqual(top('region'), 'listClustersV3')
+  })
+
+  it('finds the usage and cost operations by everyday money words', () => {
+    const usage = ['getUsageRangeV3', 'getUsageSummaryV3', 'listUsagePeriodsV3']
+    const found = (query: string, limit = 5) => searchOperations({ query, limit }).map((o) => o.id)
+    for (const query of ['spending', 'cost', 'costs', 'bill', 'invoice', 'invoices']) {
+      deepStrictEqual(found(query).sort(), usage, query)
+    }
+    for (const query of [
+      'billing',
+      'how much did we spend',
+      'how much have we spent',
+      'cost this month',
+      'database cost',
+      'spending by project',
+    ]) {
+      deepStrictEqual(found(query, 3).sort(), usage, query)
+    }
+    strictEqual(found('billing period')[0], 'listUsagePeriodsV3')
+    deepStrictEqual(
+      usage.filter((id) => !found('usage').includes(id)),
+      [],
+    )
+  })
+
+  it('keeps CPU and memory usage and usage alerts apart from cost', () => {
+    const found = (query: string) => searchOperations({ query }).map((o) => o.id)
+    strictEqual(found('cpu usage')[0], 'getDatabaseCpuUsageV3')
+    strictEqual(found('memory usage')[0], 'getDatabaseMemoryUsageV3')
+    strictEqual(found('usage alert')[0], 'getUsageAlertConfigV3')
+    for (const id of found('app spending')) {
+      ok(op(id).dedicatedTool !== 'get_metrics' && op(id).tag !== 'Usage Alerts', id)
+    }
   })
 
   it('ranks the operation the query names above longer names that contain it', () => {

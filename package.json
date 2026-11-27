@@ -19,7 +19,7 @@
     "test:live": "node --test 'test/live/*.live.ts'",
     "eval": "node evals/run.ts",
     "test:coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**' 'test/**/*.test.ts'",
-    "sync:operations": "node scripts/sync-operations.ts",
+    "sync:operations": "node scripts/sync-operations.ts && oxfmt src/sevalla/operations.json",
     "check:operations": "node scripts/sync-operations.ts --check",
     "check:code": "tsc --noEmit --skipLibCheck && oxlint && oxfmt --check",
     "lint": "oxlint",
