@@ -291,6 +291,7 @@ const SYNONYMS: Record<string, string[]> = {
   bill: ['usage cost'],
   billing: ['usage cost'],
   invoice: ['usage cost'],
+  invoic: ['usage cost'],
 }
 
 const bodyFields = (op: Operation) => Object.keys((op.body?.properties ?? {}) as Record<string, unknown>)
@@ -322,7 +323,7 @@ export interface SearchOptions {
 export const searchOperations = ({ query, cls, tag, limit = 5 }: SearchOptions): Operation[] => {
   const concepts = [...new Set(tokenize(query ?? '').map(stem))].map((term) => [
     [term],
-    ...(SYNONYMS[term] ?? []).map((synonym) => synonym.split(' ').map(stem)),
+    ...(SYNONYMS[term] ?? []).map((synonym) => tokenize(synonym).map(stem)),
   ])
   return SEARCH_INDEX.filter(
     ({ op }) => (!cls || op.class === cls) && (!tag || op.tag.toLowerCase() === tag.toLowerCase()),

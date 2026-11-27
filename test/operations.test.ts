@@ -290,7 +290,7 @@ describe('searchOperations', () => {
   it('finds the usage and cost operations by everyday money words', () => {
     const usage = ['getUsageRangeV3', 'getUsageSummaryV3', 'listUsagePeriodsV3']
     const found = (query: string, limit = 5) => searchOperations({ query, limit }).map((o) => o.id)
-    for (const query of ['spending', 'cost', 'costs', 'bill', 'invoice']) {
+    for (const query of ['spending', 'cost', 'costs', 'bill', 'invoice', 'invoices']) {
       deepStrictEqual(found(query).sort(), usage, query)
     }
     for (const query of [
