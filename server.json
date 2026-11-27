@@ -12,15 +12,19 @@
     {
       "src": "https://mcp.sevalla.com/icon.png",
       "mimeType": "image/png",
-      "sizes": ["256x256"]
+      "sizes": [
+        "256x256"
+      ]
     },
     {
       "src": "https://mcp.sevalla.com/icon.svg",
       "mimeType": "image/svg+xml",
-      "sizes": ["any"]
+      "sizes": [
+        "any"
+      ]
     }
   ],
-  "version": "2.0.0",
+  "version": "2.1.0",
   "remotes": [
     {
       "type": "streamable-http",
